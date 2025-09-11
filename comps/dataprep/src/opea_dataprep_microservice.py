@@ -23,6 +23,7 @@ from comps.cores.proto.api_protocol import (
     DataprepRequest,
     Neo4jDataprepRequest,
     RedisDataprepRequest,
+    QdrantDataprepRequest,
 )
 from comps.dataprep.src.utils import create_upload_folder
 
@@ -49,6 +50,10 @@ async def resolve_dataprep_request(request: Request):
         "process_table": form.get("process_table", False),
         "table_strategy": form.get("table_strategy", "fast"),
     }
+    
+    if "collection_name" in form:
+        print("QdrantDataprepRequest collection name:", form.get("collection_name"))
+        return QdrantDataprepRequest(**common_args, collection_name=form.get("collection_name", "rag-qdrant"))
 
     if "index_name" in form:
         return RedisDataprepRequest(
@@ -95,7 +100,9 @@ async def ingest_files(
         resolve_dataprep_request
     ),
 ):
-    if isinstance(input, RedisDataprepRequest):
+    if isinstance(input, QdrantDataprepRequest):
+        logger.info(f"[ ingest ] Qdrant mode: collection_name={input.collection_name}")
+    elif isinstance(input, RedisDataprepRequest):
         logger.info(f"[ ingest ] Redis mode: index_name={input.index_name}")
     elif isinstance(input, Neo4jDataprepRequest):
         logger.info(f"[ ingest ] Neo4j mode: ingest_from_graphDB={input.ingest_from_graphDB}")
@@ -136,7 +143,7 @@ async def ingest_files(
     port=5000,
 )
 @register_statistics(names=["opea_service@dataprep"])
-async def get_files(index_name: str = Body(None, embed=True)):
+async def get_files(collection_name: str = Body(None, embed=True)):
     start = time.time()
 
     if logflag:
@@ -144,10 +151,12 @@ async def get_files(index_name: str = Body(None, embed=True)):
 
     try:
         # Use the loader to invoke the component
-        if dataprep_component_name == "OPEA_DATAPREP_REDIS":
-            response = await loader.get_files(index_name)
+        if dataprep_component_name == "OPEA_DATAPREP_QDRANT":
+            response = await loader.get_files(collection_name)
+        elif dataprep_component_name == "OPEA_DATAPREP_REDIS":
+            response = await loader.get_files(collection_name)
         else:
-            if index_name:
+            if collection_name:
                 logger.error(
                     'Error during dataprep get files: "index_name" option is supported if "DATAPREP_COMPONENT_NAME" environment variable is set to "OPEA_DATAPREP_REDIS". i.e: export DATAPREP_COMPONENT_NAME="OPEA_DATAPREP_REDIS"'
                 )
@@ -173,7 +182,7 @@ async def get_files(index_name: str = Body(None, embed=True)):
     port=5000,
 )
 @register_statistics(names=["opea_service@dataprep"])
-async def delete_files(file_path: str = Body(..., embed=True), index_name: str = Body(None, embed=True)):
+async def delete_files(file_path: str = Body(..., embed=True), collection_name: str = Body(None, embed=True)):
     start = time.time()
 
     if logflag:
@@ -181,10 +190,12 @@ async def delete_files(file_path: str = Body(..., embed=True), index_name: str =
 
     try:
         # Use the loader to invoke the component
-        if dataprep_component_name == "OPEA_DATAPREP_REDIS":
-            response = await loader.delete_files(file_path, index_name)
+        if dataprep_component_name == "OPEA_DATAPREP_QDRANT":
+            response = await loader.delete_files(file_path, collection_name)
+        elif dataprep_component_name == "OPEA_DATAPREP_REDIS":
+            response = await loader.delete_files(file_path, collection_name)
         else:
-            if index_name:
+            if collection_name:
                 logger.error(
                     'Error during dataprep delete files: "index_name" option is supported if "DATAPREP_COMPONENT_NAME" environment variable is set to "OPEA_DATAPREP_REDIS". i.e: export DATAPREP_COMPONENT_NAME="OPEA_DATAPREP_REDIS"'
                 )
@@ -199,6 +210,36 @@ async def delete_files(file_path: str = Body(..., embed=True), index_name: str =
         return response
     except Exception as e:
         logger.error(f"Error during dataprep delete invocation: {e}")
+        raise
+
+
+@register_microservice(
+    name="opea_service@dataprep",
+    service_type=ServiceType.DATAPREP,
+    endpoint="/v1/dataprep/collections",
+    host="0.0.0.0",
+    port=5000,
+)
+@register_statistics(names=["opea_service@dataprep"])
+async def get_list_of_collections():
+    start = time.time()
+    if logflag:
+        logger.info("[ get ] start to get list of collections.")
+
+    if dataprep_component_name != "OPEA_DATAPREP_QDRANT":
+        logger.error("Error: Collections are supported only for QDRANT backend.")
+        raise HTTPException(status_code=400, detail="Qdrant backend required.")
+
+    try:
+        response = await loader.get_list_of_collections()
+
+        if logflag:
+            logger.info(f"[ get ] list of collections: {response}")
+
+        statistics_dict["opea_service@dataprep"].append_latency(time.time() - start, None)
+        return response
+    except Exception as e:
+        logger.error(f"Error during dataprep get list of collections: {e}")
         raise
 
 

@@ -189,6 +189,29 @@ class ArangoDBDataprepRequest(DataprepRequest):
         self.include_chunks = include_chunks
 
 
+class QdrantDataprepRequest(DataprepRequest):
+    def __init__(
+        self,
+        files: Optional[Union[UploadFile, List[UploadFile]]] = File(None),
+        link_list: Optional[str] = Form(None),
+        chunk_size: Optional[int] = Form(1500),
+        chunk_overlap: Optional[int] = Form(100),
+        process_table: Optional[bool] = Form(False),
+        table_strategy: Optional[str] = Form("fast"),
+        collection_name: Optional[str] = Form("rag-qdrant"),
+    ):
+        super().__init__(
+            files=files,
+            link_list=link_list,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            process_table=process_table,
+            table_strategy=table_strategy,
+        )
+
+        self.collection_name = collection_name
+
+
 class EmbeddingRequest(BaseModel):
     # Ordered by official OpenAI API documentation
     # https://platform.openai.com/docs/api-reference/embeddings

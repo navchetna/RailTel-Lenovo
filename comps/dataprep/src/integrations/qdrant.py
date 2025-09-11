@@ -12,6 +12,7 @@ from langchain_community.vectorstores import Qdrant
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import HTMLHeaderTextSplitter
 from qdrant_client import QdrantClient
+from qdrant_client.http import models
 
 from comps import CustomLogger, DocPath, OpeaComponent, OpeaComponentRegistry, ServiceType
 from comps.cores.proto.api_protocol import DataprepRequest
@@ -27,14 +28,13 @@ from comps.dataprep.src.utils import (
 logger = CustomLogger("opea_dataprep_qdrant")
 logflag = os.getenv("LOGFLAG", False)
 
-
 # Embedding model
 EMBED_MODEL = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
 # Qdrant configuration
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
-COLLECTION_NAME = os.getenv("COLLECTION_NAME", "rag-qdrant")
+DEFAULT_COLLECTION_NAME = os.getenv("COLLECTION_NAME", "rag-qdrant")
 
 # LLM/Embedding endpoints
 TGI_LLM_ENDPOINT = os.getenv("TGI_LLM_ENDPOINT", "http://localhost:8080")
@@ -42,7 +42,6 @@ TGI_LLM_ENDPOINT_NO_RAG = os.getenv("TGI_LLM_ENDPOINT_NO_RAG", "http://localhost
 TEI_EMBEDDING_ENDPOINT = os.getenv("TEI_EMBEDDING_ENDPOINT", "")
 # Huggingface API token for TEI embedding endpoint
 HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN", "")
-
 
 @OpeaComponentRegistry.register("OPEA_DATAPREP_QDRANT")
 class OpeaQdrantDataprep(OpeaComponent):
@@ -74,6 +73,7 @@ class OpeaQdrantDataprep(OpeaComponent):
             # create embeddings using local embedding model
             self.embedder = HuggingFaceEmbeddings(model_name=EMBED_MODEL)
 
+        self.client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
         # Perform health check
         health_status = self.check_health()
         if not health_status:
@@ -86,21 +86,28 @@ class OpeaQdrantDataprep(OpeaComponent):
             return False
 
         try:
-            client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
-            logger.info(client.info())
+            logger.info(self.client.get_info())
             return True
         except Exception as e:
             logger.error(f"Qdrant health check failed: {e}")
             return False
 
+    def collection_exists(self, collection_name: str) -> bool:
+        """Checks if a collection exists in Qdrant."""
+        try:
+            self.client.get_collection(collection_name)
+            return True
+        except Exception:
+            return False
+
     def invoke(self, *args, **kwargs):
         pass
 
-    async def ingest_data_to_qdrant(self, doc_path: DocPath):
+    async def ingest_data_to_qdrant(self, doc_path: DocPath, collection_name: str):
         """Ingest document to Qdrant."""
         path = doc_path.path
         if logflag:
-            logger.info(f"Parsing document {path}.")
+            logger.info(f"Parsing document {path} for collection {collection_name}.")
 
         if path.endswith(".html"):
             headers_to_split_on = [
@@ -135,7 +142,14 @@ class OpeaQdrantDataprep(OpeaComponent):
             else:
                 logger.info(f"No table chunks found in {path}.")
         if logflag:
-            logger.info("Done preprocessing. Created ", len(chunks), " chunks of the original file.")
+            logger.info(f"Done preprocessing. Created {len(chunks)} chunks of the original file.")
+
+        # Ensure collection exists
+        if not self.collection_exists(collection_name):
+            self.client.create_collection(
+                collection_name=collection_name,
+                vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE),  # Adjust size based on embedder (e.g., 384 for all-MiniLM-L6-v2)
+            )
 
         # Batch size
         batch_size = 32
@@ -147,18 +161,19 @@ class OpeaQdrantDataprep(OpeaComponent):
             _ = Qdrant.from_texts(
                 texts=batch_texts,
                 embedding=self.embedder,
-                collection_name=COLLECTION_NAME,
+                collection_name=collection_name,
                 host=QDRANT_HOST,
                 port=QDRANT_PORT,
             )
             if logflag:
-                logger.info(f"Processed batch {i//batch_size + 1}/{(num_chunks-1)//batch_size + 1}")
+                logger.info(f"Processed batch {i//batch_size + 1}/{(num_chunks-1)//batch_size + 1} for collection {collection_name}")
 
         return True
 
     async def ingest_files(
         self,
         input: DataprepRequest,
+        collection_name: Optional[str] = DEFAULT_COLLECTION_NAME,
     ):
         """Ingest files/links content into qdrant database.
 
@@ -172,6 +187,7 @@ class OpeaQdrantDataprep(OpeaComponent):
                 chunk_overlap (int, optional): The overlap between chunks. Defaults to Form(100).
                 process_table (bool, optional): Whether to process tables in PDFs. Defaults to Form(False).
                 table_strategy (str, optional): The strategy to process tables in PDFs. Defaults to Form("fast").
+                collection_name (Optional[str]): The Qdrant collection to ingest into. Defaults to env var COLLECTION_NAME.
         """
         files = input.files
         link_list = input.link_list
@@ -183,6 +199,7 @@ class OpeaQdrantDataprep(OpeaComponent):
         if logflag:
             logger.info(f"files:{files}")
             logger.info(f"link_list:{link_list}")
+            logger.info(f"Ingesting into collection: {collection_name}")
 
         if files:
             if not isinstance(files, list):
@@ -199,11 +216,12 @@ class OpeaQdrantDataprep(OpeaComponent):
                         chunk_overlap=chunk_overlap,
                         process_table=process_table,
                         table_strategy=table_strategy,
-                    )
+                    ),
+                    collection_name=collection_name,
                 )
                 uploaded_files.append(save_path)
                 if logflag:
-                    logger.info(f"Successfully saved file {save_path}")
+                    logger.info(f"Successfully saved file {save_path} to collection {collection_name}")
             result = {"status": 200, "message": "Data preparation succeeded"}
             if logflag:
                 logger.info(result)
@@ -226,13 +244,14 @@ class OpeaQdrantDataprep(OpeaComponent):
                             chunk_overlap=chunk_overlap,
                             process_table=process_table,
                             table_strategy=table_strategy,
-                        )
+                        ),
+                        collection_name=collection_name,
                     )
                 except json.JSONDecodeError:
                     raise HTTPException(status_code=500, detail="Fail to ingest data into qdrant.")
 
                 if logflag:
-                    logger.info(f"Successfully saved link {link}")
+                    logger.info(f"Successfully saved link {link} to collection {collection_name}")
 
             result = {"status": 200, "message": "Data preparation succeeded"}
             if logflag:
@@ -241,21 +260,77 @@ class OpeaQdrantDataprep(OpeaComponent):
 
         raise HTTPException(status_code=400, detail="Must provide either a file or a string list.")
 
-    async def get_files(self):
-        """Get file structure from pipecone database in the format of
+    async def get_files(self, collection_name: Optional[str] = DEFAULT_COLLECTION_NAME):
+        """Get file structure from Qdrant collection in the format of
         {
             "name": "File Name",
             "id": "File Name",
             "type": "File",
             "parent": "",
         }"""
-        pass
+        if not self.collection_exists(collection_name):
+            raise HTTPException(status_code=404, detail=f"Collection {collection_name} does not exist.")
 
-    async def delete_files(self, file_path: str = Body(..., embed=True)):
-        """Delete file according to `file_path`.
+        result = self.client.scroll(
+            collection_name=collection_name,
+            limit=100,
+            with_payload=True,
+        )
+        files = set()
+        file_structure = []
+        for point in result[0]:
+            if 'metadata' in point.payload and 'file_path' in point.payload['metadata']:
+                file_path = point.payload['metadata']['file_path']
+                if file_path not in files:
+                    files.add(file_path)
+                    file_structure.append({
+                        "name": os.path.basename(file_path),
+                        "id": file_path,
+                        "type": "File",
+                        "parent": "",
+                    })
+
+        if logflag:
+            logger.info(f"Retrieved files from collection {collection_name}: {file_structure}")
+        return file_structure
+
+    async def delete_files(self, file_path: str = Body(..., embed=True), collection_name: Optional[str] = DEFAULT_COLLECTION_NAME):
+        """Delete file according to `file_path` from the specified collection.
 
         `file_path`:
-            - specific file path (e.g. /path/to/file.txt)
-            - "all": delete all files uploaded
+            - specific file path (e.g. /path/to/file.txt): delete points related to this file
+            - "all": delete all points in the collection
         """
-        pass
+        if not self.collection_exists(collection_name):
+            raise HTTPException(status_code=404, detail=f"Collection {collection_name} does not exist.")
+
+        if file_path == "all":
+            self.client.delete_collection(collection_name)
+            if logflag:
+                logger.info(f"Deleted all files from collection {collection_name}")
+            return {"status": 200, "message": f"All files deleted from collection {collection_name}"}
+        else:
+            self.client.delete(
+                collection_name=collection_name,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="metadata.file_path",
+                                match=models.MatchValue(value=file_path),
+                            )
+                        ]
+                    )
+                ),
+            )
+            if logflag:
+                logger.info(f"Deleted file {file_path} from collection {collection_name}")
+            return {"status": 200, "message": f"File {file_path} deleted from collection {collection_name}"}
+
+    async def get_list_of_collections(self):
+        """Get list of all collections in Qdrant."""
+        collections = self.client.get_collections()
+        collection_names = [col.name for col in collections.collections]
+        if logflag:
+            logger.info(f"List of collections: {collection_names}")
+        return collection_names

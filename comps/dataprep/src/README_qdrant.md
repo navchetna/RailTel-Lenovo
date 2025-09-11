@@ -20,21 +20,21 @@ export http_proxy=${your_http_proxy}
 export https_proxy=${your_http_proxy}
 export QDRANT_HOST=${host_ip}
 export QDRANT_PORT=6333
-export COLLECTION_NAME=${your_collection_name}
-export PYTHONPATH=${path_to_comps}
+export COLLECTION_NAME=rag-qdrant
+export PYTHONPATH=/home/intel/Ervin/RailTel-Lenovo
 ```
 
 ### Build Docker Image
 
 ```bash
 cd ../../../../
-docker build -t opea/dataprep:latest --build-arg https_proxy=$https_proxy --build-arg http_proxy=$http_proxy -f comps/dataprep/src/Dockerfile .
+docker build -t railtel-lenovo-dataprep:latest --build-arg https_proxy=$https_proxy --build-arg http_proxy=$http_proxy -f comps/dataprep/src/Dockerfile .
 ```
 
 ### Run Docker with CLI
 
 ```bash
-docker run -d --name="dataprep-qdrant-server" -p 6007:6007 --ipc=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -e DATAPREP_COMPONENT_NAME="OPEA_DATAPREP_QDRANT" opea/dataprep:latest
+docker run -d --name="dataprep-qdrant-server" -p 6007:5000 --ipc=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -e DATAPREP_COMPONENT_NAME="OPEA_DATAPREP_QDRANT" opea/dataprep:latest
 ```
 
 ### Run Docker with Docker Compose
