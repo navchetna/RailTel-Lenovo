@@ -99,8 +99,8 @@ services:
       QDRANT_INDEX_NAME: rag-qdrant
       INDEX_NAME: rag-qdrant
       TEI_EMBEDDING_ENDPOINT: http://tei-embedding-service:80
-      HF_TOKEN: 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
-      HUGGINGFACEHUB_API_TOKEN: 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
+      HF_TOKEN: ${HF_TOKEN}
+      HUGGINGFACEHUB_API_TOKEN: ${HUGGINGFACEHUB_API_TOKEN}
       DATAPREP_COMPONENT_NAME: "OPEA_DATAPREP_QDRANT"
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5000/v1/health_check || exit 1"]
