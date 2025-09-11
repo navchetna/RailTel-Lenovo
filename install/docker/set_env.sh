@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 export MODEL_CACHE=/home/intel/.cache/huggingface/hub
-export HF_TOKEN=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
+export HF_TOKEN=
 export host_ip=${ip_address}
 export EMBEDDING_MODEL_ID="BAAI/bge-base-en-v1.5"
 export RERANK_MODEL_ID="BAAI/bge-reranker-base"
@@ -17,7 +17,7 @@ export LOGFLAG="true"
 # Set no proxy
 export no_proxy="$no_proxy,xeon-ui-server,xeon-backend-server,dataprep-qdrant-service,tei-embedding-service,retriever,tei-reranking-service,qdrant-vector-db,tgi-service,vllm-service,groq-service,jaeger,prometheus,grafana,node-exporter"
 
-export GROQ_API_KEY=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
+export GROQ_API_KEY=
 export LLM_ENDPOINT_PORT=8010
 export LLM_SERVER_PORT=9000
 export CHATQNA_BACKEND_PORT=8888
