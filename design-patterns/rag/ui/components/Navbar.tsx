@@ -1,0 +1,256 @@
+import React from 'react';
+import { 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  Avatar, 
+  Box, 
+  IconButton, 
+  Menu, 
+  MenuItem,
+  Divider,
+  Chip
+} from '@mui/material';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import SecurityIcon from '@mui/icons-material/Security';
+import PersonIcon from '@mui/icons-material/Person';
+import SettingsIcon from '@mui/icons-material/Settings';
+import LogoutIcon from '@mui/icons-material/Logout';
+
+interface NavbarProps {
+  user: {
+    name: string;
+    email: string;
+    avatarUrl?: string;
+  };
+  onLogout?: () => void;
+}
+
+const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
+  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
+
+  const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleLogout = () => {
+    handleClose();
+    if (onLogout) {
+      onLogout();
+    }
+  };
+
+  return (
+    <AppBar 
+      position="fixed" 
+      elevation={0}
+      sx={{ 
+        backgroundColor: 'white',
+        borderBottom: '1px solid #e5e7eb',
+        zIndex: 1300,
+        boxShadow: 'none',
+      }}
+    >
+      <Toolbar 
+        variant="dense"
+        sx={{ 
+          justifyContent: 'space-between', 
+          py: 1,
+          px: { xs: 1.5, md: 3 },
+          minHeight: '48px !important',
+          height: 48,
+        }}
+      >
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          width: '100%',
+        }}>
+          {/* Logo and Title Section */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box>
+              <Typography 
+                sx={{ 
+                  fontWeight: 600, 
+                  color: '#1565c0',
+                  fontSize: '1.25rem',
+                  fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+                  lineHeight: 1.2,
+                }}
+              >
+                Rail GPT
+              </Typography>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: '#6b7280', 
+                  fontSize: '0.75rem',
+                  fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+                  lineHeight: 1,
+                  mt: 0.5,
+                }}
+              >
+                AI-Powered Enterprise Assistant
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* User Profile Section */}
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <IconButton
+              onClick={handleMenu}
+              size="small"
+              sx={{
+                p: 0.5,
+                borderRadius: 1.5,
+                transition: 'all 0.2s',
+                '&:hover': {
+                  backgroundColor: '#f9fafb',
+                },
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Avatar 
+                  src={user.avatarUrl}
+                  alt={user.name}
+                  sx={{ 
+                    width: 28, 
+                    height: 28,
+                    backgroundColor: '#dbeafe',
+                    border: '1px solid #e5e7eb',
+                  }}
+                >
+                  {!user.avatarUrl && (
+                    <AccountCircleIcon sx={{ color: '#3b82f6', fontSize: 16 }} />
+                  )}
+                </Avatar>
+                <Box sx={{ 
+                  display: { xs: 'none', sm: 'flex' },
+                  flexDirection: 'column', 
+                  alignItems: 'flex-start',
+                  minWidth: 0,
+                }}>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      color: '#111827',
+                      fontWeight: 500,
+                      fontSize: '0.8rem',
+                      fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: '100px',
+                      lineHeight: 1.1,
+                    }}
+                  >
+                    {user.name}
+                  </Typography>
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      color: '#6b7280',
+                      fontSize: '0.7rem',
+                      fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: '100px',
+                      lineHeight: 1,
+                    }}
+                  >
+                    {user.email}
+                  </Typography>
+                </Box>
+                <KeyboardArrowDownIcon 
+                  sx={{ 
+                    color: '#9ca3af',
+                    fontSize: 14,
+                    transition: 'transform 0.2s',
+                    transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+                  }}
+                />
+              </Box>
+            </IconButton>
+
+            <Menu
+              anchorEl={anchorEl}
+              open={open}
+              onClose={handleClose}
+              anchorOrigin={{
+                vertical: 'bottom',
+                horizontal: 'right',
+              }}
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+              sx={{
+                mt: 0.5,
+                '& .MuiPaper-root': {
+                  borderRadius: 2,
+                  minWidth: 180,
+                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                  border: '1px solid #e5e7eb',
+                  '& .MuiMenuItem-root': {
+                    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+                    fontSize: '0.875rem',
+                    py: 1,
+                    px: 1.5,
+                    gap: 1.5,
+                    transition: 'background-color 0.2s',
+                  },
+                },
+              }}
+            >
+              <MenuItem 
+                onClick={handleClose}
+                sx={{
+                  '&:hover': {
+                    backgroundColor: '#f3f4f6',
+                  }
+                }}
+              >
+                <PersonIcon sx={{ fontSize: 16, color: '#6b7280' }} />
+                Profile
+              </MenuItem>
+              <MenuItem 
+                onClick={handleClose}
+                sx={{
+                  '&:hover': {
+                    backgroundColor: '#f3f4f6',
+                  }
+                }}
+              >
+                <SettingsIcon sx={{ fontSize: 16, color: '#6b7280' }} />
+                Settings
+              </MenuItem>
+              <Divider sx={{ my: 0.5 }} />
+              <MenuItem 
+                onClick={handleLogout}
+                sx={{
+                  color: '#dc2626',
+                  '&:hover': {
+                    backgroundColor: '#fef2f2',
+                  }
+                }}
+              >
+                <LogoutIcon sx={{ fontSize: 16, color: '#dc2626' }} />
+                Logout
+              </MenuItem>
+            </Menu>
+          </Box>
+        </Box>
+      </Toolbar>
+    </AppBar>
+  );
+};
+
+export default Navbar;

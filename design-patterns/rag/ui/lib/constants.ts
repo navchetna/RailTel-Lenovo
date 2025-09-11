@@ -1,0 +1,1 @@
+export const CHAT_QNA_URL = 'http://localhost:9001';
