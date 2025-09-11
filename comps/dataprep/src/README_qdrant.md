@@ -55,6 +55,14 @@ curl -X POST \
     http://localhost:6007/v1/dataprep/ingest
 ```
 
+Send request to a specific collection: (defaults to rag-qdrant)
+```bash
+curl -X POST \
+    -F "files=@./file1.txt" \
+    -F "collection_name=your_collection" \
+    "http://localhost:5000/v1/dataprep/ingest" 
+```
+
 You can specify chunk_size and chunk_size by the following commands.
 
 ```bash
