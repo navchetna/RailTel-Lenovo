@@ -10,7 +10,9 @@ pip install -r requirements.txt
 
 ### 1.2 Start Qdrant Server
 
-Please refer to this [readme](../../third_parties/pgvector/src/README.md).
+```bash
+docker run --name=qdrant-db -p 6333:6333 qdrant/qdrant 
+```
 
 ### 1.3 Setup Environment Variables
 
@@ -44,7 +46,7 @@ export RETRIEVER_COMPONENT_NAME="OPEA_RETRIEVER_QDRANT"
 
 ```bash
 cd ../../../
-docker build -t opea/retriever:latest --build-arg https_proxy=$https_proxy --build-arg http_proxy=$http_proxy -f comps/retrievers/src/Dockerfile .
+docker build -t railtel-lenovo-retriever:latest --build-arg https_proxy=$https_proxy --build-arg http_proxy=$http_proxy -f comps/retrievers/src/Dockerfile .
 ```
 
 ### 2.3 Run Docker with CLI (Option A)
@@ -80,5 +82,14 @@ export your_embedding=$(python -c "import random; embedding = [random.uniform(-1
 curl http://${your_ip}:7000/v1/retrieval \
   -X POST \
   -d "{\"text\":\"What is the revenue of Nike in 2023?\",\"embedding\":${your_embedding}}" \
-  -H 'Content-Type: application/json'
+  -H 'Content-Type: application/json' | jq
+```
+
+Retriever from a specific Qdrant collection:
+```bash
+export your_embedding=$(python -c "import random; embedding = [random.uniform(-1, 1) for _ in range(768)]; print(embedding)")
+curl http://${your_ip}:7000/v1/retrieval  \
+  -X POST  \
+  -d "{\"text\":\"Can LLMs generate ideas?\",\"embedding\":${your_embedding},\"collection_name\": \"your-collection\"}"  \
+  -H 'Content-Type: application/json' | jq
 ```
