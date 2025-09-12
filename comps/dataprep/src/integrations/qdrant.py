@@ -177,7 +177,7 @@ class OpeaQdrantDataprep(OpeaComponent):
     ):
         """Ingest files/links content into qdrant database.
 
-        Save in the format of vector[768].
+        Save in the format of vector[384].
         Returns '{"status": 200, "message": "Data preparation succeeded"}' if successful.
         Args:
             input (DataprepRequest): Model containing the following parameters:
