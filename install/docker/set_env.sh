@@ -6,7 +6,7 @@
 export MODEL_CACHE=/home/intel/.cache/huggingface/hub
 export HF_TOKEN=
 export host_ip=${ip_address}
-export EMBEDDING_MODEL_ID="BAAI/bge-base-en-v1.5"
+export EMBEDDING_MODEL_ID="BAAI/bge-small-en-v1.5"
 export RERANK_MODEL_ID="BAAI/bge-reranker-base"
 export LLM_MODEL_ID="meta-llama/Meta-Llama-3-8B-Instruct"
 export INDEX_NAME="rag-qdrant"
