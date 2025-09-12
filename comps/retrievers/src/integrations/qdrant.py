@@ -18,27 +18,22 @@ logflag = os.getenv("LOGFLAG", False)
 
 @OpeaComponentRegistry.register("OPEA_RETRIEVER_QDRANT")
 class OpeaQDrantRetriever(OpeaComponent):
-    """A specialized retriever component derived from OpeaComponent for qdrant retriever services.
-
-    Attributes:
-        client (QDrant): An instance of the qdrant client for vector database operations.
-    """
+    """A specialized retriever component derived from OpeaComponent for qdrant retriever services."""
 
     def __init__(self, name: str, description: str, config: dict = None):
         super().__init__(name, ServiceType.RETRIEVER.name.lower(), description, config)
 
-        self.db_store, self.retriever = self._initialize_client()
         health_status = self.check_health()
         if not health_status:
             logger.error("OpeaQDrantRetriever health check failed.")
 
-    def _initialize_client(self) -> QdrantEmbeddingRetriever:
-        """Initializes the qdrant client."""
+    def _initialize_client(self, collection_name: str) -> tuple:
+        """Initializes the qdrant document store and retriever for a specific collection."""
         qdrant_store = QdrantDocumentStore(
             host=QDRANT_HOST,
             port=QDRANT_PORT,
             embedding_dim=QDRANT_EMBED_DIMENSION,
-            index=QDRANT_INDEX_NAME,
+            index=collection_name,
             recreate_index=False,
         )
 
@@ -47,7 +42,7 @@ class OpeaQDrantRetriever(OpeaComponent):
         return qdrant_store, retriever
 
     def check_health(self) -> bool:
-        """Checks the health of the retriever service.
+        """Checks the health of the retriever service using the default collection.
 
         Returns:
             bool: True if the service is reachable and healthy, False otherwise.
@@ -55,8 +50,9 @@ class OpeaQDrantRetriever(OpeaComponent):
         if logflag:
             logger.info("[ check health ] start to check health of QDrant")
         try:
-            # Check the status of the QDrant service
-            _ = self.db_store.client
+            # Use default collection for health check
+            db_store, _ = self._initialize_client(QDRANT_INDEX_NAME)
+            _ = db_store.client
             logger.info("[ check health ] Successfully connected to QDrant!")
             return True
         except Exception as e:
@@ -74,7 +70,9 @@ class OpeaQDrantRetriever(OpeaComponent):
         if logflag:
             logger.info(f"[ similarity search ] input: {input}")
 
-        search_res = self.retriever.run(query_embedding=input.embedding)["documents"]
+        collection_name = input.collection_name or QDRANT_INDEX_NAME
+        db_store, retriever = self._initialize_client(collection_name)
+        search_res = retriever.run(query_embedding=input.embedding)["documents"]
 
         # format result to align with the standard output in opea_retrievers_microservice.py
         final_res = []

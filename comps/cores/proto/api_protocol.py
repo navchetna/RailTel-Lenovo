@@ -247,6 +247,7 @@ class RetrievalRequest(BaseModel):
     fetch_k: PositiveInt = 20
     lambda_mult: NonNegativeFloat = 0.5
     score_threshold: NonNegativeFloat = 0.2
+    collection_name: Optional[str] = None
 
     # define
     request_type: Literal["retrieval"] = "retrieval"

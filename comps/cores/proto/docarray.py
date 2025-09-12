@@ -103,6 +103,7 @@ class EmbedDoc(BaseDoc):
     score_threshold: NonNegativeFloat = 0.2
     constraints: Optional[Union[Dict[str, Any], List[Dict[str, Any]], None]] = None
     index_name: Optional[str] = None
+    collection_name: Optional[str] = None
 
 
 class EmbedMultimodalDoc(EmbedDoc):
