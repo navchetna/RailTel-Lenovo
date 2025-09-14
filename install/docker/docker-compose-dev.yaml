@@ -4,12 +4,12 @@
 version: "3.8"
 
 services:
-  redis-vector-db:
-    image: redis/redis-stack:7.2.0-v9
-    container_name: redis-vector-db
+  qdrant-vector-db:
+    image: qdrant/qdrant
+    container_name: qdrant-vector-db
     ports:
-      - "6379:6379"
-      - "8001:8001"
+      - "6333:6333"
+      - "6334:6334"
   mongodb:
     image: mongo
     restart: always
@@ -19,7 +19,7 @@ services:
     ports:
       - "27017:27017"
   groq-service:
-    image: thebeginner86intel/ai-agents-groq:latest
+    image: navchetna/groq:latest
     container_name: groq-service
     ports:
       - "5099:8000"
@@ -33,56 +33,80 @@ services:
       HTTP_PROXY: ${HTTP_PROXY}
       HTTPS_PROXY: ${HTTPS_PROXY}
   tei-reranking-service:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.7
     container_name: tei-reranking-server
     ports:
-      - "8808:80"
+      - "6041:80"
     volumes:
-      - "./data:/data"
+      - "${MODEL_CACHE:-./data}:/data"
     shm_size: 1g
     environment:
       no_proxy: ${no_proxy}
       http_proxy: ${http_proxy}
       https_proxy: ${https_proxy}
-      HTTP_PROXY: ${HTTP_PROXY}
-      HTTPS_PROXY: ${HTTPS_PROXY}
-      HUGGINGFACEHUB_API_TOKEN: ${HUGGINGFACEHUB_API_TOKEN}
+      HF_TOKEN: ${HF_TOKEN}
       HF_HUB_DISABLE_PROGRESS_BARS: 1
       HF_HUB_ENABLE_HF_TRANSFER: 0
     command: --model-id ${RERANK_MODEL_ID} --auto-truncate
   tei-embedding-service:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.7
     container_name: tei-embedding-server
     ports:
-      - "6006:80"
+      - "6040:80"
     volumes:
-      - "./data:/data"
+      - "${MODEL_CACHE:-./data}:/data"
     shm_size: 1g
     environment:
       no_proxy: ${no_proxy}
       http_proxy: ${http_proxy}
       https_proxy: ${https_proxy}
-      HTTP_PROXY: ${HTTP_PROXY}
-      HTTPS_PROXY: ${HTTPS_PROXY}
+      HUGGINGFACEHUB_API_TOKEN: ${HF_TOKEN}
     command: --model-id ${EMBEDDING_MODEL_ID} --auto-truncate
   retriever:
-    image: ai-agents/retriever:latest
-    container_name: retriever-redis-server
-    ports:
-      - "5007:7000"
-    ipc: host
+    image: navchetna/railtel-lenovo-retriever:latest
+    container_name: retriever-qdrant-server
     depends_on:
-      - redis-vector-db
+      - qdrant-vector-db
+    ports:
+      - "6045:7000"
+    ipc: host
     environment:
       no_proxy: ${no_proxy}
       http_proxy: ${http_proxy}
       https_proxy: ${https_proxy}
-      REDIS_URL: ${REDIS_URL}
-      INDEX_NAME: ${INDEX_NAME}
-      HTTP_PROXY: ${HTTP_PROXY}
-      HTTPS_PROXY: ${HTTPS_PROXY}
+      QDRANT_HOST: qdrant-vector-db
+      QDRANT_PORT: 6333
+      # INDEX_NAME: rag-qdrant
+      # QDRANT_INDEX_NAME: rag-qdrant
       TEI_EMBEDDING_ENDPOINT: http://tei-embedding-service:80
+      LOGFLAG: ${LOGFLAG}
+      RETRIEVER_COMPONENT_NAME: "OPEA_RETRIEVER_QDRANT"
+    restart: unless-stopped
+  dataprep-qdrant-service:
+    image: navchetna/railtel-lenovo-dataprep:latest
+    container_name: dataprep-qdrant-server
+    depends_on:
+      - qdrant-vector-db
+      - tei-embedding-service
+    ports:
+      - "6043:5000"
+    environment:
+      no_proxy: ${no_proxy}
+      http_proxy: ${http_proxy}
+      https_proxy: ${https_proxy}
+      QDRANT_HOST: qdrant-vector-db
+      QDRANT_PORT: 6333
+      # QDRANT_INDEX_NAME: rag-qdrant
+      # INDEX_NAME: rag-qdrant
+      TEI_EMBEDDING_ENDPOINT: http://tei-embedding-service:80
+      HF_TOKEN: ${HF_TOKEN}
       HUGGINGFACEHUB_API_TOKEN: ${HUGGINGFACEHUB_API_TOKEN}
+      DATAPREP_COMPONENT_NAME: "OPEA_DATAPREP_QDRANT"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/v1/health_check || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 50
     restart: unless-stopped
 
 networks:
