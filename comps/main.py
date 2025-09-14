@@ -2,8 +2,6 @@ import re
 import os
 import json
 import time
-import requests
-import aiohttp
 from uuid import uuid4
 from datetime import datetime
 from typing import List, Dict, Optional
@@ -20,8 +18,8 @@ from proto.api_protocol import (
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from proto.docarray import LLMParams, RerankerParms, RetrieverParms
-from fastapi import FastAPI, Request, HTTPException, File, UploadFile
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi import Request, HTTPException, File, UploadFile
+from fastapi.responses import StreamingResponse, JSONResponse
 from mongo_client import mongo_client
 
 
@@ -310,6 +308,7 @@ class ConversationRequest(BaseModel):
     max_tokens: Optional[int] = 1024
     temperature: Optional[float] = 0.1
     top_k: Optional[int] = 5
+    collection_name: Optional[str] = None
 
 
 class ConversationResponse(BaseModel):
@@ -496,6 +495,8 @@ class ChatQnAService:
         
         sources = []
         self.last_sources = []
+
+        collection_name = data.get("collection_name", None)
         
         parameters = LLMParams(
             max_tokens=chat_request.max_tokens if chat_request.max_tokens else 1024,
@@ -515,6 +516,7 @@ class ChatQnAService:
             fetch_k=chat_request.fetch_k if chat_request.fetch_k else 20,
             lambda_mult=chat_request.lambda_mult if chat_request.lambda_mult else 0.5,
             score_threshold=chat_request.score_threshold if chat_request.score_threshold else 0.2,
+            collection_name=collection_name  # New parameter added
         )
         reranker_parameters = RerankerParms(
             top_n=chat_request.top_n if chat_request.top_n else 5,
@@ -647,10 +649,6 @@ class ChatQnAService:
         self.service.start()
 
 
-app = FastAPI(title="ConversationRAG Service", description="RAG-based conversation service")
-
-
-
 class ConversationRAGService(ChatQnAService):
     def __init__(self, host="0.0.0.0", port=8000):
         super().__init__(host=host, port=port)
@@ -758,7 +756,8 @@ class ConversationRAGService(ChatQnAService):
                 "temperature": conversation_request.temperature,
                 "stream": stream,
                 "k": conversation_request.top_k or 5,
-                "top_n": conversation_request.top_k or 5
+                "top_n": conversation_request.top_k or 5,
+                "collection_name": conversation_request.collection_name
             }
 
             new_request = Request(scope=request.scope)
@@ -1041,146 +1040,6 @@ class ConversationRAGService(ChatQnAService):
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    async def handle_search_papers(self, request: Request):
-        try:
-            data = await request.json()
-            search_query = SearchQuery.parse_obj(data)
-            query = search_query.query
-            year = search_query.year
-            api = search_query.api.lower()
-
-            if not query:
-                raise HTTPException(status_code=400, detail="No query provided")
-
-            if api == "semantic_scholar":
-                papers = SemanticScholarAPI.search_papers(query, year)
-            elif api == "arxiv_papers":
-                papers = ArxivAPI.search_papers(query, year)
-            elif api == "doaj":
-                papers = DOAJAPI.fetch_papers(query, year)
-            else:
-                raise HTTPException(status_code=400, detail="Unsupported API")
-
-            return JSONResponse(content={"papers": papers})
-        except Exception as e:
-            print(f"Error processing search_papers request: {e}")
-            raise HTTPException(status_code=500, detail="Internal Server Error")
-
-    async def handle_suggest(self, request: Request):
-        try:
-            q = request.query_params.get("q")
-            api = request.query_params.get("api", "semantic_scholar")
-
-            if not q or len(q) < 3:
-                raise HTTPException(status_code=400, detail="Query must be at least 3 characters long")
-
-            if api == "semantic_scholar":
-                suggestions = SemanticScholarAPI.get_suggestions(q)
-            elif api == "doaj":
-                suggestions = DOAJAPI.get_suggestions(q)
-            elif api == "arxiv_papers":
-                return JSONResponse(content={"suggestions": [], "message": "arXiv API does not support suggestions. Please try Semantic Scholar or DOAJ."})
-            else:
-                raise HTTPException(status_code=400, detail="Unsupported API")
-
-            return JSONResponse(content={"suggestions": suggestions})
-        except Exception as e:
-            print(f"Error processing suggest request: {e}")
-            raise HTTPException(status_code=500, detail="Failed to get suggestions")
-
-    async def handle_download_references(self, request: Request):
-        try:
-            data = await request.json()
-            paper = PaperID.parse_obj(data)
-            depth = data.get("depth", 1)
-
-            if paper.api == "semantic_scholar":
-                references = SemanticScholarAPI.fetch_references(paper.paper_id)
-            elif paper.api == "arxiv_papers":
-                references = ArxivAPI.fetch_references(paper.paper_id)
-            elif paper.api == "doaj":
-                references = []
-            else:
-                raise HTTPException(status_code=400, detail="Unsupported API")
-
-            if not references:
-                raise HTTPException(status_code=500, detail="Failed to fetch references")
-
-            with open("references.json", "w") as file:
-                json.dump(references, file)
-            return FileResponse("references.json", media_type='application/json')
-        except Exception as e:
-            print(f"Error processing download_references request: {e}")
-            raise HTTPException(status_code=500, detail="Internal Server Error")
-
-    async def handle_transcribe(self, file: UploadFile = File(...)):
-        try:
-            file_content = await file.read()
-            
-            whisper_url = f"http://{WHISPER_SERVICE_HOST_IP}:{WHISPER_SERVICE_PORT}/api/transcribe"
-            
-            async with aiohttp.ClientSession() as session:
-                form = aiohttp.FormData()
-                form.add_field('file', 
-                              file_content,
-                              filename=file.filename,
-                              content_type=file.content_type)
-                
-                async with session.post(whisper_url, data=form, timeout=30) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        raise HTTPException(
-                            status_code=response.status, 
-                            detail=f"Whisper service error: {error_text}"
-                        )
-                    
-                    response_data = await response.json()
-                    return JSONResponse(content=response_data)
-                
-        except aiohttp.ClientError as e:
-            print(f"Error connecting to Whisper service: {str(e)}")
-            raise HTTPException(status_code=503, detail=f"Could not connect to Whisper service: {str(e)}")
-        except Exception as e:
-            print(f"Error in transcription service: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(status_code=500, detail=str(e))
-
-    async def handle_whisper_healthcheck(self, request: Request):
-        try:
-            whisper_url = f"http://{WHISPER_SERVICE_HOST_IP}:{WHISPER_SERVICE_PORT}/api/healthcheck"
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(whisper_url, timeout=5) as response:
-                    if response.status != 200:
-                        return JSONResponse(
-                            status_code=503,
-                            content={
-                                "status": "unavailable", 
-                                "message": "Whisper service is not healthy"
-                            }
-                        )
-                    
-                    health_data = await response.json()
-                    return JSONResponse(content=health_data)
-                    
-        except aiohttp.ClientError as e:
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "status": "unavailable", 
-                    "message": f"Could not connect to Whisper service: {str(e)}"
-                }
-            )
-        except Exception as e:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "status": "error", 
-                    "message": f"Error checking Whisper service health: {str(e)}"
-                }
-            )
-
     def serialize_datetime(self, obj):
         if isinstance(obj, dict):
             return {k: self.serialize_datetime(v) for k, v in obj.items()}
@@ -1206,13 +1065,6 @@ class ConversationRAGService(ChatQnAService):
         self.service.add_route("/api/conversations/{conversation_id}", self.handle_get_history, methods=["GET"])
         self.service.add_route("/api/conversations/{conversation_id}", self.handle_delete_conversation, methods=["DELETE"])
         self.service.add_route("/api/conversations", self.handle_list_conversations, methods=["GET"])
-        self.service.add_route("/api/search_papers", self.handle_search_papers, methods=["POST"])
-        self.service.add_route("/api/suggest", self.handle_suggest, methods=["GET"])
-        self.service.add_route("/api/download_references", self.handle_download_references, methods=["POST"])
-        # self.service.add_route("/api/circulars", handle_circular_update, methods=["PATCH"])
-        # self.service.add_route("/api/circulars", handle_circular_get, methods=["GET"])
-        self.service.add_route("/api/transcribe", self.handle_transcribe, methods=["POST"])
-        self.service.add_route("/api/whisper_healthcheck", self.handle_whisper_healthcheck, methods=["GET"])
         self.service.start()
 
 if __name__ == "__main__":

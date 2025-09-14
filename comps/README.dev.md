@@ -157,6 +157,13 @@ curl -X POST "http://localhost:9000/api/conversations/new" -d '{"db_name": "<DB_
 curl -X POST "http://localhost:9000/api/conversations/{conversation_id}" \
      -H "Content-Type: application/json" \
      -d '{"db_name": "<DB_NAME>", "question": "what are straightforward to define and efficient to train, but to the best of our knowledge, there has been no demonstration that they are capable of generating high quality samples?"}' | jq
+```
+
+#### Continue a conversation within a collection:
+```bash
+curl -X POST "http://localhost:9000/api/conversations/{conversation_id}" \
+     -H "Content-Type: application/json" \
+     -d '{"db_name": "<DB_NAME>", "3D marine seismic data of volume 280 km2 was acquired over what?", "collection_name": "your_collection"}' | jq
 
 ### Can add temperature, max_tokens
 ```
