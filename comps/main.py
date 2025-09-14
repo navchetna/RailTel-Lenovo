@@ -5,12 +5,11 @@ import time
 import requests
 import aiohttp
 from uuid import uuid4
-import redis
 from datetime import datetime
 from typing import List, Dict, Optional
 from langchain_core.prompts import PromptTemplate
 from comps import MegaServiceEndpoint, MicroService, ServiceOrchestrator, ServiceRoleType, ServiceType
-from core.utils import handle_message
+from cores.mega.utils import handle_message
 from proto.api_protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -21,16 +20,10 @@ from proto.api_protocol import (
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from proto.docarray import LLMParams, RerankerParms, RetrieverParms
-from comps.circulars.metadata_operations import handle_circular_update, handle_circular_get
-from fastapi import Request, HTTPException, File, UploadFile
+from fastapi import FastAPI, Request, HTTPException, File, UploadFile
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from mongo_client import mongo_client
 
-SEMANTIC_SCHOLAR_SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
-SEMANTIC_SCHOLAR_REFERENCES_URL = "https://api.semanticscholar.org/graph/v1/paper/{paper_id}/references"
-ARXIV_SEARCH_URL = "http://export.arxiv.org/api/query"
-DOAJ_SEARCH_URL = "https://doaj.org/api/v1/search/articles/{query}"
-DOAJ_API_KEY = os.getenv('DOAJ_API_KEY')
 
 load_dotenv()
 MONGO_USERNAME = os.getenv("MONGO_USERNAME")
@@ -51,12 +44,6 @@ LLM_SERVER_HOST_IP = os.getenv("LLM_SERVER_HOST_IP", "0.0.0.0")
 LLM_SERVER_PORT = int(os.getenv("LLM_SERVER_PORT", 80))
 LLM_MODEL = os.getenv("LLM_MODEL_ID", "meta-llama/Meta-Llama-3.1-8B-Instruct")
 REDIS_URL = os.getenv("REDIS_URL")
-# export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-# export MEGA_SERVICE_PORT=9001
-
-# Add Whisper service constants
-WHISPER_SERVICE_HOST_IP = os.getenv("WHISPER_SERVICE_HOST_IP", "0.0.0.0")
-WHISPER_SERVICE_PORT = int(os.getenv("WHISPER_SERVICE_PORT", 8765))
 
 def align_inputs(self, inputs, cur_node, runtime_graph, llm_parameters_dict, **kwargs):
     if self.services[cur_node].service_type == ServiceType.EMBEDDING:
@@ -308,116 +295,6 @@ def align_generator(self, gen, **kwargs):
         yield buffer
     
     yield ""
-
-class SearchQuery(BaseModel):
-    query: str
-    year: int = None
-    api: str = "semantic_scholar"
-
-
-class PaperID(BaseModel):
-    paper_id: str
-    api: str = "semantic_scholar"
-
-
-class SemanticScholarAPI:
-    @staticmethod
-    def construct_query(query: str) -> str:
-        terms = query.split()
-        search_terms = []
-        operator = None
-        for term in terms:
-            if term.upper() in ["AND", "OR"]:
-                operator = term.upper()
-            else:
-                if operator:
-                    if operator == "AND":
-                        search_terms.append(f"{search_terms.pop()} AND {term}")
-                    elif operator == "OR":
-                        search_terms.append(f"{search_terms.pop()} OR {term}")
-                    operator = None
-                else:
-                    search_terms.append(term)
-        return " AND ".join(search_terms)
-
-    @staticmethod
-    def search_papers(query: str, year: int = None):
-        semantic_query = SemanticScholarAPI.construct_query(query)
-        url = f"{SEMANTIC_SCHOLAR_SEARCH_URL}?query={semantic_query}&fields=title,url,abstract,year&limit=10"
-        response = requests.get(url)
-        search_results = response.json().get('data', [])
-        if year:
-            search_results = [result for result in search_results if result.get('year') == year]
-        return [{"title": result['title'], "url": result['url'], "snippet": result.get('abstract', '')} for result in search_results]
-
-    @staticmethod
-    def get_suggestions(query: str):
-        semantic_query = SemanticScholarAPI.construct_query(query)
-        url = f"{SEMANTIC_SCHOLAR_SEARCH_URL}?query={semantic_query}&fields=title,url,abstract"
-        response = requests.get(url)
-        results = response.json().get('data', [])
-        return [result['title'] for result in results]
-
-    @staticmethod
-    def fetch_references(paper_id: str):
-        url = SEMANTIC_SCHOLAR_REFERENCES_URL.format(paper_id=paper_id)
-        response = requests.get(url)
-        return response.json().get('data', [])
-
-
-class ArxivAPI:
-    @staticmethod
-    def search_papers(query: str, year: int = None):
-        url = f"{ARXIV_SEARCH_URL}?search_query={query}&start=0&max_results=10"
-        response = requests.get(url)
-        entries = response.text.split("<entry>")
-        papers = []
-        for entry in entries[1:]:
-            title = entry.split("<title>")[1].split("</title>")[0]
-            url = entry.split("<id>")[1].split("</id>")[0]
-            snippet = entry.split("<summary>")[1].split("</summary>")[0]
-            year_published = entry.split("<published>")[1].split("</published>")[0][:4]
-            if year and int(year_published) != year:
-                continue
-            papers.append({"title": title, "url": url, "snippet": snippet})
-        return papers
-
-    @staticmethod
-    def fetch_references(paper_id: str):
-        url =  f"{ARXIV_SEARCH_URL}?search_query=id:{paper_id}"
-        response = requests.get(url)
-        entries = response.text.split("<entry>")
-        references = []
-        for entry in entries[1:]:
-            title = entry.split("<title>")[1].split("</title>")[0]
-            url = entry.split("<id>")[1].split("</id>")[0]
-            year = entry.split("<published>")[1].split("</published>")[0][:4]
-            references.append({"title": title, "url": url, "year": int(year)})
-        return references
-
-
-class DOAJAPI:
-    @staticmethod
-    def fetch_papers(query: str, year: int = None):
-        url = DOAJ_SEARCH_URL.format(query=query)
-        params = {
-            "api_key": DOAJ_API_KEY,
-            "pageSize": 10
-        }
-        response = requests.get(url, params=params)
-        if response.status_code != 200:
-            print(f"Failed to fetch DOAJ papers: Status Code: {response.status_code}, Raw Response: {response.text}")
-            return []
-        articles = response.json().get('results', [])
-        papers = [{"title": article['bibjson']['title'], "url": article['bibjson']['link'][0]['url'], "snippet": article.get('bibjson', {}).get('abstract', ''), "year": article.get('bibjson', {}).get('year')} for article in articles]
-        if year:
-            papers = [paper for paper in papers if paper.get('year') and int(paper.get('year')) == int(year)]
-        return papers
-
-    @staticmethod
-    def get_suggestions(query: str):
-        papers = DOAJAPI.fetch_papers(query)
-        return [paper['title'] for paper in papers]
 
 
 class SourceInfo(BaseModel):
@@ -768,6 +645,10 @@ class ChatQnAService:
         self.service.add_route(self.endpoint, self.handle_request, methods=["POST"])
 
         self.service.start()
+
+
+app = FastAPI(title="ConversationRAG Service", description="RAG-based conversation service")
+
 
 
 class ConversationRAGService(ChatQnAService):
