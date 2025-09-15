@@ -168,7 +168,7 @@ curl -X POST "http://localhost:9000/api/conversations/{conversation_id}" \
 ```bash
 curl -X POST "http://localhost:9000/api/conversations/{conversation_id}" \
      -H "Content-Type: application/json" \
-     -d '{"db_name": "<DB_NAME>", "3D marine seismic data of volume 280 km2 was acquired over what?", "collection_name": "your_collection"}' | jq
+     -d '{"db_name": "<DB_NAME>", "question": "3D marine seismic data of volume 280 km2 was acquired over what?", "collection_name": "your_collection"}' | jq
 
 ### Can add temperature, max_tokens
 ```
