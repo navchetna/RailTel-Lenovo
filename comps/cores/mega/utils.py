@@ -16,6 +16,9 @@ from PIL import Image
 
 from .logger import CustomLogger
 
+def mkdirIfNotExists(dir: str):
+  if not os.path.exists(dir):
+    os.makedirs(dir)
 
 def is_port_free(host: str, port: int) -> bool:
     """Check if a given port on a host is free.

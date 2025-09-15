@@ -10,7 +10,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings, HuggingFaceInferenceAPIEmbeddings
 from langchain_community.vectorstores import Qdrant
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_text_splitters import HTMLHeaderTextSplitter
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
@@ -24,6 +23,13 @@ from comps.dataprep.src.utils import (
     parse_html_new,
     save_content_to_local_disk,
 )
+from comps.parsers.treeparser import TreeParser
+from comps.parsers.tree import Tree
+from comps.parsers.node import Node
+from comps.parsers.text import Text
+from comps.parsers.table import Table
+
+import requests
 
 logger = CustomLogger("opea_dataprep_qdrant")
 logflag = os.getenv("LOGFLAG", False)
@@ -40,7 +46,6 @@ DEFAULT_COLLECTION_NAME = os.getenv("COLLECTION_NAME", "rag-qdrant")
 TGI_LLM_ENDPOINT = os.getenv("TGI_LLM_ENDPOINT", "http://localhost:8080")
 TGI_LLM_ENDPOINT_NO_RAG = os.getenv("TGI_LLM_ENDPOINT_NO_RAG", "http://localhost:8081")
 TEI_EMBEDDING_ENDPOINT = os.getenv("TEI_EMBEDDING_ENDPOINT", "")
-# Huggingface API token for TEI embedding endpoint
 HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN", "")
 
 @OpeaComponentRegistry.register("OPEA_DATAPREP_QDRANT")
@@ -50,7 +55,6 @@ class OpeaQdrantDataprep(OpeaComponent):
     def __init__(self, name: str, description: str, config: dict = None):
         super().__init__(name, ServiceType.DATAPREP.name.lower(), description, config)
         self.upload_folder = "./uploaded_files/"
-        # Create vectorstore
         if TEI_EMBEDDING_ENDPOINT:
             if not HF_TOKEN:
                 raise HTTPException(
@@ -65,19 +69,18 @@ class OpeaQdrantDataprep(OpeaComponent):
                     status_code=400, detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} is not available."
                 )
             model_id = response.json()["model_id"]
-            # create embeddings using TEI endpoint service
             self.embedder = HuggingFaceInferenceAPIEmbeddings(
                 api_key=HF_TOKEN, model_name=model_id, api_url=TEI_EMBEDDING_ENDPOINT
             )
         else:
-            # create embeddings using local embedding model
             self.embedder = HuggingFaceEmbeddings(model_name=EMBED_MODEL)
 
         self.client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
-        # Perform health check
         health_status = self.check_health()
         if not health_status:
             logger.error("OpeaQdrantDataprep health check failed.")
+
+        self.tree_parser = TreeParser()
 
     def check_health(self) -> bool:
         """Checks the health of the Qdrant service."""
@@ -103,55 +106,112 @@ class OpeaQdrantDataprep(OpeaComponent):
     def invoke(self, *args, **kwargs):
         pass
 
+    def get_table_description(self, item: Table):
+        server_host_ip = os.getenv("SERVER_HOST_IP", "localhost")
+        server_port = os.getenv("LLM_SERVER_PORT", 8000)
+        model_name = os.getenv("LLM_MODEL_ID")
+        use_model_param = os.getenv("LLM_USE_MODEL_PARAM", "false").lower() == "true"
+        url = f"http://{server_host_ip}:{server_port}/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream"
+        }
+
+        data = {
+            "messages": [
+                {
+                    "role": "system",
+                    "content": """
+                        <s>[INST] <<SYS>>\n You are a helpful, respectful, and honest assistant. Your task is to generate a detailed and descriptive summary of the provided table data in Markdown format, based strictly on the table and its heading. <</SYS>> 
+                        [INST] Your job is to create a clear, specific, and **factual** textual description. **Do not add any external information** or provide an abstract summary. Only base the description on the data from the table and its heading.
+                        
+                        1. Link the **columns** with the corresponding **values** in the rows, referencing the exact terms and terminology from the table. 
+                        2. For each row, explain how each column's data relates to the corresponding values. Ensure the description is **step-by-step** and follows the structure of the table in a natural order.
+                        3. **Do not return the table itself.** Provide only the descriptive summary, written in **paragraphs**.
+                        4. The description should be precise, direct, and **avoid interpretation** or generalization. Stay true to the exact data given.
+                        
+                        Think carefully and make sure to describe every column and its respective values in detail. 
+                    """
+                },
+                {
+                    "role": "user",
+                    "content": f"{item.heading}\n{item.markdown_content}",
+                }
+            ],
+            "stream": False
+        }
+
+        if use_model_param and model_name:
+            data["model"] = model_name
+        else:
+            data["file_name"] = ""
+
+        response = requests.post(url, headers=headers, json=data)
+        response_data = json.loads(response.text)
+        return response_data['choices'][0]['message']['content']
+
+    def chunk_node_content(self, node: Node, text_splitter: RecursiveCharacterTextSplitter):
+        content = node.get_content()
+        chunks = []
+        for item in content:
+            if isinstance(item, Text):
+                text_chunks = text_splitter.split_text(item.content)
+                chunks.extend(text_chunks)
+            if isinstance(item, Table):
+                table_description = self.get_table_description(item)
+                table_description_chunks = text_splitter.split_text(table_description)
+                chunks.extend(table_description_chunks)
+        return chunks
+
+    def create_chunks(self, node: Node, text_splitter: RecursiveCharacterTextSplitter):
+        node_chunks = self.chunk_node_content(node, text_splitter)
+        total = node.get_length_children()
+        for i in range(total):
+            node_chunks.extend(self.create_chunks(node.get_child(i), text_splitter))
+        return node_chunks
+
     async def ingest_data_to_qdrant(self, doc_path: DocPath, collection_name: str):
-        """Ingest document to Qdrant."""
+        """Ingest document to Qdrant using tree parsing logic."""
         path = doc_path.path
         if logflag:
             logger.info(f"Parsing document {path} for collection {collection_name}.")
 
-        if path.endswith(".html"):
-            headers_to_split_on = [
-                ("h1", "Header 1"),
-                ("h2", "Header 2"),
-                ("h3", "Header 3"),
-            ]
-            text_splitter = HTMLHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
-        else:
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=doc_path.chunk_size,
-                chunk_overlap=doc_path.chunk_overlap,
-                add_start_index=True,
-                separators=get_separators(),
-            )
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=doc_path.chunk_size,
+            chunk_overlap=doc_path.chunk_overlap,
+            add_start_index=True,
+            separators=get_separators(),
+        )
 
-        content = await document_loader(path)
+        tree = Tree(path)
+        self.tree_parser.populate_tree(tree)
+        self.tree_parser.generate_output_text(tree)
+
+        self.tree_parser.generate_output_json(tree)
+        chunks = self.create_chunks(tree.rootNode, text_splitter)
 
         structured_types = [".xlsx", ".csv", ".json", "jsonl"]
         _, ext = os.path.splitext(path)
-
         if ext in structured_types:
+            content = await document_loader(path)
             chunks = content
-        else:
-            chunks = text_splitter.split_text(content)
 
         if doc_path.process_table and path.endswith(".pdf"):
             table_chunks = get_tables_result(path, doc_path.table_strategy)
-            logger.info(f"table chunks: {table_chunks}")
             if table_chunks:
-                chunks = chunks + table_chunks
+                chunks.extend(table_chunks)
             else:
-                logger.info(f"No table chunks found in {path}.")
+                logger.info(f"No additional table chunks found in {path}.")
+
         if logflag:
             logger.info(f"Done preprocessing. Created {len(chunks)} chunks of the original file.")
 
-        # Ensure collection exists
         if not self.collection_exists(collection_name):
             self.client.create_collection(
                 collection_name=collection_name,
-                vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE),  # Adjust size based on embedder (e.g., 384 for all-MiniLM-L6-v2)
+                vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE),
             )
 
-        # Batch size
         batch_size = 32
         num_chunks = len(chunks)
         for i in range(0, num_chunks, batch_size):

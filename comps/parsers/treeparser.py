@@ -12,7 +12,7 @@ from comps import CustomLogger
 from comps.parsers.node import Node
 from comps.parsers.text import Text
 from comps.parsers.table import Table
-from comps.core.utils import mkdirIfNotExists
+from comps.cores.mega.utils import mkdirIfNotExists
 
 OUTPUT_DIR = "out"
 NCERT_TOC_DIR = "../parsers/ncert_toc"
