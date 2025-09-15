@@ -10,11 +10,11 @@ export HTTP_PROXY=http://proxy-dmz.intel.com:912
 ### Mandatory services
 ```bash
 export no_proxy=127.0.0.1,localhost,.intel.com,10.235.124.11,10.235.124.12,10.235.124.13,10.96.0.0/12,10.235.64.0/18,chatqna-xeon-ui-server,chatqna-xeon-backend-server,dataprep-redis-service,tei-embedding-service,retriever,tei-reranking-service,tgi-service,vllm_service,backend,mongodb,tei-reranking-server,tei-embedding-server,groq-service
-export EMBEDDING_MODEL_ID="BAAI/bge-base-en-v1.5"
+export MODEL_CACHE=<path/to/cache>
+export EMBEDDING_MODEL_ID="BAAI/bge-small-en-v1.5"
 export RERANK_MODEL_ID="BAAI/bge-reranker-base"
 export LLM_MODEL_ID="meta-llama/Meta-Llama-3.1-8B-Instruct"
-export INDEX_NAME="rag-redis"
-export REDIS_URL="redis://redis-vector-db:6379"
+export INDEX_NAME="rag-qdrant"
 export SERVER_HOST_URL=localhost:9000
 export MEGA_SERVICE_PORT=9000
 export EMBEDDING_SERVER_HOST_IP=tei-embedding-service
@@ -51,21 +51,26 @@ pip install -r requirements.txt # only once
 cd dataprep/
 pip install -r requirements.txt # only once
 
-export PYTHONPATH=<path/to/ai-agents/dir>
+export PYTHONPATH=<path/to/project_dir>
 export HUGGINGFACEHUB_API_TOKEN=<token>
-export REDIS_URL=redis://redis-vector-db:6379
-export no_proxy=127.0.0.1,localhost,.intel.com,10.235.124.11,10.235.124.12,10.235.124.13,10.96.0.0/12,10.235.64.0/18,chatqna-xeon-ui-server,chatqna-xeon-backend-server,dataprep-redis-service,tei-embedding-service,retriever,tei-reranking-service,tgi-service,vllm_service,backend,mongodb,tei-reranking-server,tei-embedding-server,groq-service
+export QDRANT_HOST=${host_ip}
+export QDRANT_PORT=6333
+
+export http_proxy=${your_http_proxy}
+export https_proxy=${your_http_proxy}
+export no_proxy="$no_proxy,xeon-ui-server,xeon-backend-server,dataprep-qdrant-service,tei-embedding-service,retriever,tei-reranking-service,qdrant-vector-db,tgi-service,vllm-service,groq-service,jaeger,prometheus,grafana,node-exporter"
+
 ```
 
 #### Run the service:
 ```bash
-python3 prepare_doc_redis.py
+python3 opea_dataprep_microservice.py
 ```
-The dataprep service will be running on http://localhost:6007
+The dataprep service will be running on http://localhost:5000
 
 #### Test the dataprep component by uploading a file:
 ```bash
-curl -X POST "http://localhost:6007/v1/dataprep" -H "Content-Type: multipart/form-data" -F "files=@<path/to/pdf>"
+curl -X POST "http://localhost:5000/v1/dataprep" -H "Content-Type: multipart/form-data" -F "files=@<path/to/pdf>" -F "collection_name=your_collection"
 ```
 
 
