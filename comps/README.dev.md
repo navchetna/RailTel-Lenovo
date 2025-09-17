@@ -169,6 +169,13 @@ curl -X POST "http://localhost:9000/api/conversations/{conversation_id}" \
 curl -X POST "http://localhost:9000/api/conversations/{conversation_id}" \
      -H "Content-Type: application/json" \
      -d '{"db_name": "<DB_NAME>", "question": "3D marine seismic data of volume 280 km2 was acquired over what?", "collection_name": "your_collection"}' | jq
+```
+
+#### Include metrics in response:
+```bash
+curl -X POST "http://localhost:9000/api/conversations/{conversation_id}" \
+     -H "Content-Type: application/json" \
+     -d '{"db_name": "<DB_NAME>", "question": "3D marine seismic data of volume 280 km2 was acquired over what?", "include_metrics": true}' | jq
 
 ### Can add temperature, max_tokens
 ```
