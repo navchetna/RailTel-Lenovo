@@ -41,11 +41,7 @@ RERANK_SERVER_PORT = int(os.getenv("RERANK_SERVER_PORT", 80))
 LLM_SERVER_HOST_IP = os.getenv("LLM_SERVER_HOST_IP", "0.0.0.0")
 LLM_SERVER_PORT = int(os.getenv("LLM_SERVER_PORT", 80))
 LLM_MODEL = os.getenv("LLM_MODEL_ID", "meta-llama/Meta-Llama-3.1-8B-Instruct")
-REDIS_URL = os.getenv("REDIS_URL")
 
-SHOW_METRICS = os.getenv("SHOW_METRICS", "false").lower() == "true"
-
-#llama tokenizer
 TOKEN_ENCODING = tiktoken.get_encoding("cl100k_base")
 
 def align_inputs(self, inputs, cur_node, runtime_graph, llm_parameters_dict, **kwargs):
@@ -314,6 +310,7 @@ class ConversationRequest(BaseModel):
     temperature: Optional[float] = 0.1
     top_k: Optional[int] = 5
     collection_name: Optional[str] = None
+    include_metrics: Optional[bool] = False
 
 
 class ConversationResponse(BaseModel):
@@ -608,32 +605,25 @@ class ChatQnAService:
                     "throughput": throughput
                 }
 
-            provided_metrics = data.get("metrics", None)
+            include_metrics = data.get("include_metrics", False)
+
             metrics_registry_data = self.megaservice.__class__._metrics_registry.get(request_id, {})
 
-            if provided_metrics:
-                metrics_data = {
-                    "ttft": float(provided_metrics.get("ttft", 0.0)),
-                    "e2e_latency": float(provided_metrics.get("e2e_latency", 0.0)),
-                    "output_tokens": int(provided_metrics.get("output_tokens", 0)),
-                    "throughput": float(provided_metrics.get("throughput", 0.0))
-                }
-            elif metrics_registry_data and metrics_registry_data.get("completed", False):
-                metrics_data = {
-                    "ttft": float(metrics_registry_data.get("ttft", 0.0)),
-                    "e2e_latency": float(metrics_registry_data.get("e2e_latency", 0.0)),
-                    "output_tokens": int(metrics_registry_data.get("output_tokens", 0)),
-                    "throughput": float(metrics_registry_data.get("throughput", 0.0))
-                }
-            else:
-                metrics_data = {
-                    "ttft": 0.0,
-                    "e2e_latency": 0.0,
-                    "output_tokens": 0,
-                    "throughput": 0.0
-                }
-            
-            if SHOW_METRICS:
+            if include_metrics:
+                if metrics_registry_data and metrics_registry_data.get("completed", False):
+                    metrics_data = {
+                        "ttft": float(metrics_registry_data.get("ttft", 0.0)),
+                        "e2e_latency": float(metrics_registry_data.get("e2e_latency", 0.0)),
+                        "output_tokens": int(metrics_registry_data.get("output_tokens", 0)),
+                        "throughput": float(metrics_registry_data.get("throughput", 0.0))
+                    }
+                else:
+                    metrics_data = {
+                        "ttft": 0.0,
+                        "e2e_latency": 0.0,
+                        "output_tokens": 0,
+                        "throughput": 0.0
+                    }
                 response_dict["metrics"] = metrics_data
 
             if request_id in self.megaservice.__class__._metrics_registry:
@@ -703,8 +693,7 @@ class ConversationRAGService(ChatQnAService):
             "timestamp": datetime.now()
         }
 
-        # Conditionally include metrics based on flag
-        if SHOW_METRICS and metrics:
+        if metrics:
             turn["metrics"] = {
                 "ttft": float(metrics.get("ttft", 0.0)),
                 "e2e_latency": float(metrics.get("e2e_latency", 0.0)),
@@ -747,6 +736,9 @@ class ConversationRAGService(ChatQnAService):
             data = await request.json()
             conversation_request = ConversationRequest.parse_obj(data)
 
+            include_metrics = conversation_request.include_metrics
+            print("Include metrics:", include_metrics)
+
             e2e_start_time = time.perf_counter()
             ttft_start_time = e2e_start_time
 
@@ -775,7 +767,8 @@ class ConversationRAGService(ChatQnAService):
                 "stream": stream,
                 "k": conversation_request.top_k or 5,
                 "top_n": conversation_request.top_k or 5,
-                "collection_name": conversation_request.collection_name
+                "collection_name": conversation_request.collection_name,
+                "include_metrics": include_metrics
             }
 
             new_request = Request(scope=request.scope)
@@ -854,7 +847,7 @@ class ConversationRAGService(ChatQnAService):
                             }
                         
                         print(f"DEBUG: Saving streamed content to MongoDB: {len(full_response)} chars, {len(sources)} sources")
-                        if SHOW_METRICS:
+                        if include_metrics:
                             self.save_conversation_turn(
                                 conversation_request.conversation_id,
                                 conversation_request.question,
@@ -893,60 +886,42 @@ class ConversationRAGService(ChatQnAService):
                         "throughput": 0.0
                     }
                     
-                    provided_metrics = data.get("metrics", None)
-                    if provided_metrics:
-                        metrics_data = {
-                            "ttft": float(provided_metrics.get("ttft", 0.0)),
-                            "e2e_latency": float(provided_metrics.get("e2e_latency", 0.0)),
-                            "output_tokens": int(provided_metrics.get("output_tokens", 0)),
-                            "throughput": float(provided_metrics.get("throughput", 0.0))
-                        }
-                        
-                        answer_text = answer_text.replace('\r\n', '\n').replace('\n{3,}', '\n\n')
-                        
-                        if SHOW_METRICS:
-                            self.save_conversation_turn(
-                                conversation_request.conversation_id,
-                                conversation_request.question,
-                                conversations_collection,
-                                answer_text,
-                                data.get("sources", []),
-                                metrics_data
-                            )
-                        else:
-                            self.save_conversation_turn(
-                                conversation_request.conversation_id,
-                                conversation_request.question,
-                                conversations_collection,
-                                answer_text,
-                                data.get("sources", []),
-                                None
-                            )
+                    metrics_registry_data = self.megaservice.__class__._metrics_registry.get(request_id, {})
+
+                    if include_metrics:
+                        if metrics_registry_data and metrics_registry_data.get("completed", False):
+                            metrics_data = {
+                                "ttft": float(metrics_registry_data.get("ttft", 0.0)),
+                                "e2e_latency": float(metrics_registry_data.get("e2e_latency", 0.0)),
+                                "output_tokens": int(metrics_registry_data.get("output_tokens", 0)),
+                                "throughput": float(metrics_registry_data.get("throughput", 0.0))
+                            }
+                    
+                    answer_text = answer_text.replace('\r\n', '\n').replace('\n{3,}', '\n\n')
+                    
+                    if include_metrics:
+                        self.save_conversation_turn(
+                            conversation_request.conversation_id,
+                            conversation_request.question,
+                            conversations_collection,
+                            answer_text,
+                            data.get("sources", []),
+                            metrics_data
+                        )
                     else:
-                        print("DEBUG: No provided metrics; using defaults and skipping save if flag false.")
-                        if SHOW_METRICS:
-                            self.save_conversation_turn(
-                                conversation_request.conversation_id,
-                                conversation_request.question,
-                                conversations_collection,
-                                answer_text,
-                                data.get("sources", []),
-                                metrics_data
-                            )
-                        else:
-                            self.save_conversation_turn(
-                                conversation_request.conversation_id,
-                                conversation_request.question,
-                                conversations_collection,
-                                answer_text,
-                                data.get("sources", []),
-                                None
-                            )
+                        self.save_conversation_turn(
+                            conversation_request.conversation_id,
+                            conversation_request.question,
+                            conversations_collection,
+                            answer_text,
+                            data.get("sources", []),
+                            None
+                        )
                     
                     processed_sources = data.get("sources", [])
                     source_info_list = self.prepare_source_info_list(processed_sources)
                     
-                    if SHOW_METRICS and metrics_data:
+                    if include_metrics and metrics_data:
                         return ConversationResponse(
                             conversation_id=conversation_request.conversation_id,
                             answer=answer_text,
@@ -966,12 +941,26 @@ class ConversationRAGService(ChatQnAService):
                 response_data = json.loads(rag_response.body.decode())
                 answer = response_data["choices"][0]["message"]["content"]
                 sources = response_data.get("sources", [])
-                metrics_data = response_data.get("metrics", {
-                    "ttft": 0.0,
-                    "e2e_latency": 0.0,
-                    "output_tokens": 0,
-                    "throughput": 0.0
-                })
+                metrics_data = None
+
+                if include_metrics:
+                    metrics_data = response_data.get("metrics")
+                    if not metrics_data:
+                        metrics_registry_data = self.megaservice.__class__._metrics_registry.get(request_id, {})
+                        if metrics_registry_data and metrics_registry_data.get("completed", False):
+                            metrics_data = {
+                                "ttft": float(metrics_registry_data.get("ttft", 0.0)),
+                                "e2e_latency": float(metrics_registry_data.get("e2e_latency", 0.0)),
+                                "output_tokens": int(metrics_registry_data.get("output_tokens", 0)),
+                                "throughput": float(metrics_registry_data.get("throughput", 0.0))
+                            }
+                        else:
+                            metrics_data = {
+                                "ttft": 0.0,
+                                "e2e_latency": 0.0,
+                                "output_tokens": 0,
+                                "throughput": 0.0
+                            }
 
                 processed_sources = []
                 for source in sources:
@@ -983,7 +972,7 @@ class ConversationRAGService(ChatQnAService):
                         }
                         processed_sources.append(processed_source)
 
-                if SHOW_METRICS:
+                if include_metrics and metrics_data:
                     self.save_conversation_turn(
                         conversation_request.conversation_id,
                         conversation_request.question,
@@ -1007,7 +996,7 @@ class ConversationRAGService(ChatQnAService):
 
                 source_info_list = self.prepare_source_info_list(processed_sources)
 
-                if SHOW_METRICS and metrics_data:
+                if include_metrics and metrics_data:
                     return ConversationResponse(
                         conversation_id=conversation_request.conversation_id,
                         answer=answer,
