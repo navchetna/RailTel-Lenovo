@@ -9,7 +9,8 @@ import {
   Menu, 
   MenuItem,
   Divider,
-  Chip
+  Chip,
+  Button
 } from '@mui/material';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
@@ -17,6 +18,10 @@ import SecurityIcon from '@mui/icons-material/Security';
 import PersonIcon from '@mui/icons-material/Person';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
+import AdminPanelSettings from '@mui/icons-material/AdminPanelSettings';
+import SupervisorAccount from '@mui/icons-material/SupervisorAccount';
+import Shield from '@mui/icons-material/Shield';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 interface NavbarProps {
   user: {
@@ -25,9 +30,10 @@ interface NavbarProps {
     avatarUrl?: string;
   };
   onLogout?: () => void;
+  onGoBack?: () => void;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
+const Navbar_admin: React.FC<NavbarProps> = ({ user, onLogout, onGoBack }) => {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
 
@@ -52,58 +58,60 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
       elevation={0}
       sx={{ 
         backgroundColor: 'white',
-        borderBottom: '1px solid #e5e7eb',
+        borderBottom: '2px solid #d32f2f',
         zIndex: 1300,
         boxShadow: 'none',
       }}
     >
-      <Toolbar 
-        variant="dense"
-        sx={{ 
-          justifyContent: 'space-between', 
-          py: 1,
-          px: { xs: 1.5, md: 3 },
-          minHeight: '48px !important',
-          height: 48,
-        }}
-      >
+      <Box sx={{ 
+        py: { xs: 1.5, md: 1 },
+        px: { xs: 2, md: 1, sm: 5 }, // Added sm: 5 as requested
+        width: '100%' // Ensure full width
+      }}>
         <Box sx={{ 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'space-between',
-          width: '100%',
+          width: '100%', // Ensure full width
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: { xs: 1.5, sm: 0 }
         }}>
-          {/* Logo and Title Section */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Box>
-              <Typography 
-                sx={{ 
-                  fontWeight: 600, 
-                  color: '#aa0404ff',
-                  fontSize: '1.25rem',
-                  fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-                  lineHeight: 1.2,
-                }}
-              >
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 2,
+              cursor: onGoBack ? 'pointer' : 'default',
+              transition: 'opacity 0.2s',
+              '&:hover': onGoBack ? {
+                opacity: 0.8
+              } : {}
+            }}
+            onClick={onGoBack}
+          >
+            <AdminPanelSettings sx={{ fontSize: 32, color: '#d32f2f' }} />
+            <Box sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
+              <Typography sx={{ 
+                fontWeight: 700, 
+                color: '#d32f2f',
+                fontSize: '1.2rem'
+              }}>
                 Rail GPT Admin
               </Typography>
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  color: '#6b7280', 
-                  fontSize: '0.75rem',
-                  fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-                  lineHeight: 1,
-                  mt: 0.5,
-                }}
-              >
-                AI-Powered Enterprise Assistant
+              <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.75rem' }}>
+                Administrative Control Panel
               </Typography>
             </Box>
           </Box>
-
-          {/* User Profile Section */}
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 2,
+            flexWrap: 'wrap',
+            paddingRight: { xs: 1, sm: 2 } // Add padding to avoid scrollbar collision
+          }}>
+            {/* User Profile Section */}
             <IconButton
               onClick={handleMenu}
               size="small"
@@ -248,9 +256,9 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
             </Menu>
           </Box>
         </Box>
-      </Toolbar>
+      </Box>
     </AppBar>
   );
 };
 
-export default Navbar;
+export default Navbar_admin;

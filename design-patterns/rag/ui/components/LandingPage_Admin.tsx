@@ -8,7 +8,11 @@ import {
   Grid,
   useTheme,
   useMediaQuery,
-  Container
+  Container,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   Psychology as AIIcon,
@@ -18,11 +22,32 @@ import {
   Security as SecurityIcon,
   AccountBalance,
   ArrowForward as ArrowForwardIcon,
-  SmartToy as BotIcon
+  SmartToy as BotIcon,
+  Logout as LogoutIcon,
+  ExitToApp as ExitIcon
 } from '@mui/icons-material';
 
+// Type definitions
+interface Department {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ComponentType<any>;
+  color: string;
+  bgColor: string;
+}
+
+interface ChatAreaProps {
+  onLogout: () => void;
+}
+
+interface LandingPageProps {
+  onAuthenticated?: (department: string, user: string) => void;
+  onLogout?: () => void; // Added logout prop
+}
+
 // Mock ChatArea component since it's not provided
-const ChatArea = ({ onLogout }) => (
+const ChatArea: React.FC<ChatAreaProps> = ({ onLogout }) => (
   <Box sx={{ p: 4, textAlign: 'center' }}>
     <Typography variant="h4" gutterBottom>
       Welcome to RailTel GPT
@@ -36,7 +61,7 @@ const ChatArea = ({ onLogout }) => (
   </Box>
 );
 
-const departments = [
+const departments: Department[] = [
   {
     id: 'hr',
     name: 'Human Resources GPT',
@@ -63,18 +88,15 @@ const departments = [
   }
 ];
 
-interface LandingPageProps {
-  onAuthenticated?: (department: string, user: string) => void;
-}
-
-export default function LandingPage({ onAuthenticated }: LandingPageProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authenticatedDept, setAuthenticatedDept] = useState<any>(null);
+const LandingPage: React.FC<LandingPageProps> = ({ onAuthenticated, onLogout }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [authenticatedDept, setAuthenticatedDept] = useState<Department | null>(null);
+  const [openLogoutDialog, setOpenLogoutDialog] = useState<boolean>(false);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  const handleDepartmentClick = (dept: any) => {
+  const handleDepartmentClick = (dept: Department): void => {
     setIsAuthenticated(true);
     setAuthenticatedDept(dept);
     if (onAuthenticated) {
@@ -82,9 +104,24 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = (): void => {
     setIsAuthenticated(false);
     setAuthenticatedDept(null);
+  };
+
+  const handleMainLogout = (): void => {
+    setOpenLogoutDialog(true);
+  };
+
+  const handleConfirmLogout = (): void => {
+    setOpenLogoutDialog(false);
+    if (onLogout) {
+      onLogout();
+    }
+  };
+
+  const handleCancelLogout = (): void => {
+    setOpenLogoutDialog(false);
   };
 
   if (isAuthenticated && authenticatedDept) {
@@ -101,14 +138,27 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
           <Typography variant="h6">
             RailTel GPT - {authenticatedDept.name}
           </Typography>
-          <Button 
-            onClick={handleLogout} 
-            color="inherit" 
-            variant="outlined"
-            size="small"
-          >
-            Back
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button 
+              onClick={handleLogout} 
+              color="inherit" 
+              variant="outlined"
+              size="small"
+            >
+              Back
+            </Button>
+            {onLogout && (
+              <Button 
+                onClick={handleMainLogout} 
+                color="inherit" 
+                variant="outlined"
+                size="small"
+                startIcon={<LogoutIcon />}
+              >
+                Logout
+              </Button>
+            )}
+          </Box>
         </Box>
         <ChatArea onLogout={handleLogout} />
       </Box>
@@ -121,17 +171,18 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
       <Box sx={{ 
         backgroundColor: 'white', 
         borderBottom: '1px solid #e5e7eb', 
-        py: { xs: 1.5, md: 2 },
-        px: { xs: 2, md: 4 }
+        py: { xs: 1.5, md: 1 },  // Also change md: 2 to md: 1
+        px: { xs: 2, md: 0.25 },
+        width: '100%'
       }}>
-        <Container maxWidth="xl">
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between',
-            flexDirection: { xs: 'column', sm: 'row' },
-            gap: { xs: 1.5, sm: 0 }
-          }}>
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          width: '100%', // Add this
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: { xs: 1.5, sm: 0 }
+        }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <AIIcon sx={{ fontSize: 28, color: '#1565c0' }} />
               <Box sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
@@ -150,15 +201,31 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
             <Box sx={{ 
               display: 'flex', 
               alignItems: 'center', 
-              gap: 1, 
-              color: '#6b7280',
-              fontSize: '0.875rem'
+              gap: 2,
+              flexWrap: 'wrap'
             }}>
-              <SecurityIcon sx={{ fontSize: 16 }} />
-              <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>Secure AI Access</Typography>
+              
+              {onLogout && (
+                <Button
+                  onClick={handleMainLogout}
+                  variant="outlined"
+                  size="small"
+                  startIcon={<ExitIcon />}
+                  sx={{
+                    borderColor: '#1565c0',
+                    color: '#1565c0',
+                    '&:hover': {
+                      borderColor: '#0d47a1',
+                      backgroundColor: '#e3f2fd'
+                    }
+                  }}
+                >
+                  Logout
+                </Button>
+              )}
             </Box>
           </Box>
-        </Container>
+        
       </Box>
 
       {/* Hero Section - Reduced padding and font sizes */}
@@ -261,7 +328,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
               fontSize: { xs: '1.50rem', md: '2.25rem', lg: '2.5rem' },
               letterSpacing: '-0.025em'
             }}>
-              AI Department Assistants
+              AI Assistants
             </Typography>
             <Typography variant="h6" sx={{ 
               color: '#6b7280',
@@ -269,7 +336,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
               fontWeight: 400,
               lineHeight: 1.6
             }}>
-              Pick your department’s AI assistant
+              Pick your division's AI assistant
             </Typography>
           </Box>
 
@@ -377,6 +444,27 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
           </Grid>
         </Container>
       </Box>
+
+      {/* Logout Confirmation Dialog */}
+      <Dialog open={openLogoutDialog} onClose={handleCancelLogout} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirm Logout</DialogTitle>
+        <DialogContent>
+          <Typography>Are you sure you want to logout? You will need to login again to access Rail GPT.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelLogout}>Cancel</Button>
+          <Button 
+            onClick={handleConfirmLogout} 
+            variant="contained"
+            color="error"
+            sx={{ backgroundColor: '#1565c0' }}
+          >
+            Logout
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
-}
+};
+
+export default LandingPage;

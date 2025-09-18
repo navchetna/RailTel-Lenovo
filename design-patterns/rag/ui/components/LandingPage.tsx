@@ -24,7 +24,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   IconButton,
   Tabs,
   Tab,
@@ -33,14 +32,15 @@ import {
   Snackbar,
   OutlinedInput,
   ListItemText,
-  Checkbox
+  Checkbox,
+  SelectChangeEvent
 } from '@mui/material';
 import {
   Psychology as AIIcon,
   Settings as OperationsIcon,
   Security as SecurityIcon,
   ArrowForward as ArrowForwardIcon,
-  SmartToy as BotIcon,
+  FolderOpen as DocumentIcon,
   AdminPanelSettings as AdminIcon,
   Shield as ShieldIcon,
   SupervisorAccount as SupervisorIcon,
@@ -52,17 +52,74 @@ import {
   AccountBalance as FinanceIcon,
   Train as RailwayIcon,
   PersonAdd as PersonAddIcon,
-  GroupAdd as GroupAddIcon
+  GroupAdd as GroupAddIcon,
+  Logout as LogoutIcon,
+  ExitToApp as ExitIcon
 } from '@mui/icons-material';
 
+// Type definitions
+interface Department {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ComponentType<any>;
+  color: string;
+}
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  departments: string[];
+  role: string;
+  status: string;
+}
+
+interface UserForm {
+  name: string;
+  email: string;
+  departments: string[];
+  role: string;
+  password: string;
+}
+
+interface DeptForm {
+  name: string;
+  description: string;
+}
+
+interface SnackbarState {
+  open: boolean;
+  message: string;
+  severity: 'success' | 'error' | 'warning' | 'info';
+}
+
+interface GPTBot {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ComponentType<any>;
+  color: string;
+  bgColor: string;
+}
+
+interface ChatAreaProps {
+  onLogout: () => void;
+}
+
+interface LandingPageProps {
+  onAuthenticated?: (department: string, user: string) => void;
+  onLogout?: () => void;
+}
+
 // Mock ChatArea component since it's not provided
-const ChatArea = ({ onLogout }) => (
+const ChatArea: React.FC<ChatAreaProps> = ({ onLogout }) => (
   <Box sx={{ p: 4, textAlign: 'center' }}>
     <Typography variant="h4" gutterBottom>
-      Welcome to RailTel GPT Admin Portal
+      Welcome to RailTel Document Manager
     </Typography>
     <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-      Your administrative AI-powered assistant is ready to help.
+      Your administrative document management system is ready.
     </Typography>
     <Button variant="contained" onClick={onLogout}>
       Return to Admin Dashboard
@@ -70,98 +127,110 @@ const ChatArea = ({ onLogout }) => (
   </Box>
 );
 
-const railtelGPT = {
+const railtelDocumentManager: GPTBot = {
   id: 'railtel',
-  name: 'RailTel GPT',
-  description: 'Comprehensive AI assistant for all RailTel operations including HR, Finance, Railway Operations, Infrastructure Management, and Strategic Planning',
-  icon: BotIcon,
+  name: 'RailTel Document Manager',
+  description: 'Comprehensive document management system for all RailTel Divisions including HR, Finance, Railway Operations',
+  icon: DocumentIcon,
   color: '#d32f2f',
   bgColor: '#ffebee'
 };
 
-const initialDepartments = [
+const initialDepartments: Department[] = [
   { id: 'hr', name: 'Human Resources', description: 'Employee management, recruitment, training, and organizational development', icon: PeopleIcon, color: '#1976d2' },
   { id: 'finance', name: 'Finance', description: 'Financial planning, budgeting, accounting, and revenue management', icon: FinanceIcon, color: '#388e3c' },
   { id: 'operations', name: 'Operations', description: 'Railway operations, infrastructure management, and service delivery', icon: RailwayIcon, color: '#f57c00' },
 ];
 
 // Updated initial users with multiple departments
-const initialUsers = [
+const initialUsers: User[] = [
   { id: 1, name: 'John Doe', email: 'john.doe@railtel.com', departments: ['hr'], role: 'Manager', status: 'Active' },
   { id: 2, name: 'Jane Smith', email: 'jane.smith@railtel.com', departments: ['finance', 'operations'], role: 'Analyst', status: 'Active' },
   { id: 3, name: 'Mike Johnson', email: 'mike.johnson@railtel.com', departments: ['operations'], role: 'Coordinator', status: 'Inactive' },
   { id: 4, name: 'Sarah Wilson', email: 'sarah.wilson@railtel.com', departments: ['hr'], role: 'Specialist', status: 'Active' }
 ];
 
-interface LandingPageProps {
-  onAuthenticated?: (department: string, user: string) => void;
-}
-
-export default function LandingPage({ onAuthenticated }: LandingPageProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authenticatedDept, setAuthenticatedDept] = useState<any>(null);
-  const [showManagement, setShowManagement] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
-  const [users, setUsers] = useState(initialUsers);
-  const [departments, setDepartments] = useState(initialDepartments);
-  const [openUserDialog, setOpenUserDialog] = useState(false);
-  const [openDeptDialog, setOpenDeptDialog] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [editingDept, setEditingDept] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+const LandingPage: React.FC<LandingPageProps> = ({ onAuthenticated, onLogout }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [authenticatedDept, setAuthenticatedDept] = useState<GPTBot | null>(null);
+  const [showManagement, setShowManagement] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<number>(0);
+  const [users, setUsers] = useState<User[]>(initialUsers);
+  const [departments, setDepartments] = useState<Department[]>(initialDepartments);
+  const [openUserDialog, setOpenUserDialog] = useState<boolean>(false);
+  const [openDeptDialog, setOpenDeptDialog] = useState<boolean>(false);
+  const [openLogoutDialog, setOpenLogoutDialog] = useState<boolean>(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingDept, setEditingDept] = useState<Department | null>(null);
+  const [snackbar, setSnackbar] = useState<SnackbarState>({ open: false, message: '', severity: 'success' });
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   // Updated user form state to handle multiple departments
-  const [userForm, setUserForm] = useState({
+  const [userForm, setUserForm] = useState<UserForm>({
     name: '',
     email: '',
-    departments: [], // Changed from single department to array
+    departments: [],
     role: '',
     password: ''
   });
 
   // Department form state
-  const [deptForm, setDeptForm] = useState({
+  const [deptForm, setDeptForm] = useState<DeptForm>({
     name: '',
     description: ''
   });
 
-  const handleGPTClick = () => {
+  const handleDocumentManagerClick = (): void => {
     setIsAuthenticated(true);
-    setAuthenticatedDept(railtelGPT);
+    setAuthenticatedDept(railtelDocumentManager);
     if (onAuthenticated) {
-      onAuthenticated(railtelGPT.id, "admin");
+      onAuthenticated(railtelDocumentManager.id, "admin");
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = (): void => {
     setIsAuthenticated(false);
     setAuthenticatedDept(null);
     setShowManagement(false);
   };
 
-  const handleManageClick = () => {
+  const handleMainLogout = (): void => {
+    setOpenLogoutDialog(true);
+  };
+
+  const handleConfirmLogout = (): void => {
+    setOpenLogoutDialog(false);
+    if (onLogout) {
+      onLogout();
+    }
+  };
+
+  const handleCancelLogout = (): void => {
+    setOpenLogoutDialog(false);
+  };
+
+  const handleManageClick = (): void => {
     setShowManagement(true);
   };
 
-  const handleBackToDashboard = () => {
+  const handleBackToDashboard = (): void => {
     setShowManagement(false);
   };
 
-  const showSnackbar = (message, severity = 'success') => {
+  const showSnackbar = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success'): void => {
     setSnackbar({ open: true, message, severity });
   };
 
-  // Updated User Management Functions
-  const handleAddUser = () => {
+  // User Management Functions
+  const handleAddUser = (): void => {
     setEditingUser(null);
     setUserForm({ name: '', email: '', departments: [], role: '', password: '' });
     setOpenUserDialog(true);
   };
 
-  const handleEditUser = (user) => {
+  const handleEditUser = (user: User): void => {
     setEditingUser(user);
     setUserForm({ 
       name: user.name,
@@ -173,12 +242,12 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
     setOpenUserDialog(true);
   };
 
-  const handleDeleteUser = (userId) => {
+  const handleDeleteUser = (userId: number): void => {
     setUsers(users.filter(user => user.id !== userId));
     showSnackbar('User deleted successfully');
   };
 
-  const handleSaveUser = () => {
+  const handleSaveUser = (): void => {
     if (userForm.departments.length === 0) {
       showSnackbar('Please select at least one department', 'error');
       return;
@@ -192,7 +261,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
       ));
       showSnackbar('User updated successfully');
     } else {
-      const newUser = {
+      const newUser: User = {
         id: Math.max(...users.map(u => u.id), 0) + 1,
         ...userForm,
         status: 'Active'
@@ -203,8 +272,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
     setOpenUserDialog(false);
   };
 
-  // Handle department selection change
-  const handleDepartmentChange = (event) => {
+  const handleDepartmentChange = (event: SelectChangeEvent<string[]>): void => {
     const value = event.target.value;
     setUserForm({
       ...userForm,
@@ -213,19 +281,19 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
   };
 
   // Department Management Functions
-  const handleAddDepartment = () => {
+  const handleAddDepartment = (): void => {
     setEditingDept(null);
     setDeptForm({ name: '', description: '' });
     setOpenDeptDialog(true);
   };
 
-  const handleEditDepartment = (dept) => {
+  const handleEditDepartment = (dept: Department): void => {
     setEditingDept(dept);
     setDeptForm({ name: dept.name, description: dept.description });
     setOpenDeptDialog(true);
   };
 
-  const handleDeleteDepartment = (deptId) => {
+  const handleDeleteDepartment = (deptId: string): void => {
     const usersInDept = users.filter(user => user.departments?.includes(deptId));
     if (usersInDept.length > 0) {
       showSnackbar('Cannot delete department with assigned users', 'error');
@@ -235,7 +303,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
     showSnackbar('Department deleted successfully');
   };
 
-  const handleSaveDepartment = () => {
+  const handleSaveDepartment = (): void => {
     if (editingDept) {
       setDepartments(departments.map(dept => 
         dept.id === editingDept.id 
@@ -244,7 +312,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
       ));
       showSnackbar('Department updated successfully');
     } else {
-      const newDept = {
+      const newDept: Department = {
         id: deptForm.name.toLowerCase().replace(/\s+/g, ''),
         name: deptForm.name,
         description: deptForm.description,
@@ -258,7 +326,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
   };
 
   // Function to get department names from IDs
-  const getDepartmentNames = (departmentIds) => {
+  const getDepartmentNames = (departmentIds: string[]): string[] => {
     return departmentIds?.map(id => {
       const dept = departments.find(d => d.id === id);
       return dept ? dept.name : id;
@@ -266,11 +334,31 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
   };
 
   // Function to get department colors from IDs
-  const getDepartmentColors = (departmentIds) => {
+  const getDepartmentColors = (departmentIds: string[]): string[] => {
     return departmentIds?.map(id => {
       const dept = departments.find(d => d.id === id);
       return dept ? dept.color : '#9c27b0';
     }) || [];
+  };
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number): void => {
+    setActiveTab(newValue);
+  };
+
+  const handleUserFormChange = (field: keyof UserForm) => (
+    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ): void => {
+    setUserForm({ ...userForm, [field]: event.target.value });
+  };
+
+  const handleDeptFormChange = (field: keyof DeptForm) => (
+    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ): void => {
+    setDeptForm({ ...deptForm, [field]: event.target.value });
+  };
+
+  const handleSnackbarClose = (): void => {
+    setSnackbar({ ...snackbar, open: false });
   };
 
   if (isAuthenticated && authenticatedDept && !showManagement) {
@@ -287,7 +375,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <AdminIcon sx={{ fontSize: 24 }} />
             <Typography variant="h6">
-              RailTel GPT Admin - {authenticatedDept.name}
+              RailTel Admin - {authenticatedDept.name}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
@@ -319,32 +407,40 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
     return (
       <Box sx={{ minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
         <Box sx={{ 
-          backgroundColor: '#d32f2f', 
-          color: 'white', 
+          backgroundColor: '#f5f5f5', 
+          color: 'red', 
           p: 2, 
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: 'center' 
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <AdminIcon sx={{ fontSize: 24 }} />
-            <Typography variant="h6">
-              RailTel GPT Admin - Management Portal
-            </Typography>
+            <Typography variant="h6"></Typography>
           </Box>
-          <Button 
-            onClick={handleBackToDashboard} 
-            color="inherit" 
-            variant="outlined"
-            size="small"
-          >
-            Back to Dashboard
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button 
+              onClick={handleBackToDashboard} 
+              color="inherit" 
+              variant="outlined"
+              size="small"
+            >
+              Back to Dashboard
+            </Button>
+            <Button 
+              onClick={handleMainLogout} 
+              color="inherit" 
+              variant="outlined"
+              size="small"
+              startIcon={<LogoutIcon />}
+            >
+              Logout
+            </Button>
+          </Box>
         </Box>
 
         <Container maxWidth="xl" sx={{ py: 4 }}>
           <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-            <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)}>
+            <Tabs value={activeTab} onChange={handleTabChange}>
               <Tab 
                 icon={<PeopleIcon />} 
                 label="User Management" 
@@ -353,7 +449,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
               />
               <Tab 
                 icon={<BusinessIcon />} 
-                label="Department Management" 
+                label="Division Management" 
                 iconPosition="start"
                 sx={{ textTransform: 'none', fontWeight: 600 }}
               />
@@ -387,7 +483,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
                       <TableRow>
                         <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
                         <TableCell sx={{ fontWeight: 600 }}>Email</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Departments</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Division</TableCell>
                         <TableCell sx={{ fontWeight: 600 }}>Role</TableCell>
                         <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                         <TableCell sx={{ fontWeight: 600 }}>Actions</TableCell>
@@ -444,7 +540,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
             <Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h4" sx={{ fontWeight: 600, color: '#1f2937' }}>
-                  Department Management
+                  Division Management
                 </Typography>
                 <Button
                   variant="contained"
@@ -455,7 +551,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
                     '&:hover': { backgroundColor: '#b71c1c' }
                   }}
                 >
-                  Add Department
+                  Add Division
                 </Button>
               </Box>
 
@@ -506,7 +602,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
           )}
         </Container>
 
-        {/* Updated User Dialog with Multi-Select */}
+        {/* All Dialogs remain the same */}
         <Dialog open={openUserDialog} onClose={() => setOpenUserDialog(false)} maxWidth="sm" fullWidth>
           <DialogTitle>
             {editingUser ? 'Edit User' : 'Add New User'}
@@ -517,7 +613,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
                 fullWidth
                 label="Name"
                 value={userForm.name}
-                onChange={(e) => setUserForm({...userForm, name: e.target.value})}
+                onChange={handleUserFormChange('name')}
                 margin="normal"
               />
               <TextField
@@ -525,11 +621,11 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
                 label="Email"
                 type="email"
                 value={userForm.email}
-                onChange={(e) => setUserForm({...userForm, email: e.target.value})}
+                onChange={handleUserFormChange('email')}
                 margin="normal"
               />
               <FormControl fullWidth margin="normal">
-                <InputLabel>Departments</InputLabel>
+                <InputLabel>Divisions</InputLabel>
                 <Select
                   multiple
                   value={userForm.departments}
@@ -573,7 +669,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
                 fullWidth
                 label="Role"
                 value={userForm.role}
-                onChange={(e) => setUserForm({...userForm, role: e.target.value})}
+                onChange={handleUserFormChange('role')}
                 margin="normal"
               />
               <TextField
@@ -581,7 +677,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
                 label="Password"
                 type="password"
                 value={userForm.password}
-                onChange={(e) => setUserForm({...userForm, password: e.target.value})}
+                onChange={handleUserFormChange('password')}
                 margin="normal"
                 helperText={editingUser ? "Leave blank to keep current password" : ""}
               />
@@ -599,7 +695,6 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
           </DialogActions>
         </Dialog>
 
-        {/* Department Dialog */}
         <Dialog open={openDeptDialog} onClose={() => setOpenDeptDialog(false)} maxWidth="sm" fullWidth>
           <DialogTitle>
             {editingDept ? 'Edit Department' : 'Add New Department'}
@@ -610,7 +705,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
                 fullWidth
                 label="Department Name"
                 value={deptForm.name}
-                onChange={(e) => setDeptForm({...deptForm, name: e.target.value})}
+                onChange={handleDeptFormChange('name')}
                 margin="normal"
               />
               <TextField
@@ -619,7 +714,7 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
                 multiline
                 rows={3}
                 value={deptForm.description}
-                onChange={(e) => setDeptForm({...deptForm, description: e.target.value})}
+                onChange={handleDeptFormChange('description')}
                 margin="normal"
               />
             </Box>
@@ -636,13 +731,30 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
           </DialogActions>
         </Dialog>
 
-        {/* Snackbar */}
+        <Dialog open={openLogoutDialog} onClose={handleCancelLogout} maxWidth="xs" fullWidth>
+          <DialogTitle>Confirm Logout</DialogTitle>
+          <DialogContent>
+            <Typography>Are you sure you want to logout? You will need to login again to access the admin panel.</Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCancelLogout}>Cancel</Button>
+            <Button 
+              onClick={handleConfirmLogout} 
+              variant="contained"
+              color="error"
+              sx={{ backgroundColor: '#d32f2f' }}
+            >
+              Logout
+            </Button>
+          </DialogActions>
+        </Dialog>
+
         <Snackbar
           open={snackbar.open}
           autoHideDuration={3000}
-          onClose={() => setSnackbar({...snackbar, open: false})}
+          onClose={handleSnackbarClose}
         >
-          <Alert severity={snackbar.severity} onClose={() => setSnackbar({...snackbar, open: false})}>
+          <Alert severity={snackbar.severity} onClose={handleSnackbarClose}>
             {snackbar.message}
           </Alert>
         </Snackbar>
@@ -652,75 +764,86 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
 
   return (
     <Box sx={{ minHeight: '100vh', backgroundColor: 'white' }}>
-      {/* Admin Header */}
+      {/* Admin Header - Fixed for full width */}
       <Box sx={{ 
         backgroundColor: 'white', 
         borderBottom: '2px solid #d32f2f', 
-        py: { xs: 1.5, md: 2 },
-        px: { xs: 2, md: 4 }
+        py: { xs: 1, md: 1.5 },
+        px: { xs: 2, md: 1, sm: 5 }, // Added sm: 5 as mentioned
+        width: '100%' // Ensure full width
       }}>
-        <Container maxWidth="xl">
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          width: '100%', // Ensure full width
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: { xs: 1, sm: 0 }
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <AdminIcon sx={{ fontSize: 24, color: '#d32f2f' }} />
+            <Box sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
+              <Typography sx={{ 
+                fontWeight: 700, 
+                color: '#d32f2f',
+                fontSize: '1.25rem'
+              }}>
+                Rail GPT Admin
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.75rem' }}>
+                Administrative Control Panel
+              </Typography>
+            </Box>
+          </Box>
           <Box sx={{ 
             display: 'flex', 
             alignItems: 'center', 
-            justifyContent: 'space-between',
-            flexDirection: { xs: 'column', sm: 'row' },
-            gap: { xs: 1.5, sm: 0 }
+            gap: 1.5,
+            flexWrap: 'wrap',
+            paddingRight: { xs: 1, sm: 2 } // Add padding to avoid scrollbar collision
           }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <AdminIcon sx={{ fontSize: 32, color: '#d32f2f' }} />
-              <Box sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
-                <Typography sx={{ 
-                  fontWeight: 700, 
-                  color: '#d32f2f',
-                  fontSize: '1.6rem'
-                }}>
-                  Rail GPT Admin
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.85rem' }}>
-                  Administrative Control Panel
-                </Typography>
-              </Box>
-            </Box>
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 2,
-              flexWrap: 'wrap'
-            }}>
-              <Chip 
-                icon={<SupervisorIcon />} 
-                label="Administrator" 
-                sx={{ 
-                  backgroundColor: '#d32f2f',
-                  color: 'white',
-                  fontWeight: 600,
-                  fontSize: '0.75rem'
-                }}
+            <Chip 
+              icon={<SupervisorIcon />} 
+              label="Administrator" 
+              sx={{ 
+                backgroundColor: '#d32f2f',
+                color: 'white',
+                fontWeight: 600,
+                fontSize: '0.7rem'
+              }}
+              size="small"
+            />
+            
+            {onLogout && (
+              <Button
+                onClick={handleMainLogout}
+                variant="outlined"
                 size="small"
-              />
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 1, 
-                color: '#6b7280',
-                fontSize: '0.875rem'
-              }}>
-                <ShieldIcon sx={{ fontSize: 16 }} />
-                <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>Admin Access</Typography>
-              </Box>
-            </Box>
+                startIcon={<ExitIcon />}
+                sx={{
+                  borderColor: '#d32f2f',
+                  color: '#d32f2f',
+                  fontSize: '0.8rem',
+                  '&:hover': {
+                    borderColor: '#b71c1c',
+                    backgroundColor: '#ffebee'
+                  }
+                }}
+              >
+                Logout
+              </Button>
+            )}
           </Box>
-        </Container>
+        </Box>
       </Box>
 
-      {/* Admin Hero Section */}
+      {/* Admin Hero Section - Reduced sizes and padding */}
       <Box sx={{ 
         background: 'linear-gradient(135deg, #ffebee 0%, #ffffff 50%, #f9fafb 100%)',
-        py: { xs: 4, md: 6, lg: 8 },
-        px: { xs: 2, md: 4 }
+        py: { xs: 3, md: 4 },
+        px: { xs: 2, md: 3 }
       }}>
-        <Container maxWidth="xl">
+        <Container maxWidth="lg">
           <Box sx={{ 
             textAlign: 'center',
             width: '100%'
@@ -728,304 +851,330 @@ export default function LandingPage({ onAuthenticated }: LandingPageProps) {
             <Typography variant="h1" component="h1" sx={{ 
               fontWeight: 'bold',
               color: '#111827',
-              mb: { xs: 3, md: 4 },
-              fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem', lg: '3.5rem' },
-              lineHeight: { xs: 1.2, md: 1.1 },
+              mb: { xs: 2, md: 3 },
+              fontSize: { xs: '1.75rem', sm: '2rem', md: '2.5rem' },
+              lineHeight: 1.2,
               letterSpacing: '-0.025em'
             }}>
               Rail GPT Admin Portal
               <Box component="span" sx={{ 
                 display: 'block', 
                 color: '#d32f2f',
-                mt: { xs: 0.5, md: 0 }
+                fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' }
               }}>
                 Administrative Control
               </Box>
             </Typography>
             
-            <Typography variant="h5" sx={{ 
+            <Typography variant="h6" sx={{ 
               color: '#6b7280',
-              mb: { xs: 6, md: 8 },
+              mb: { xs: 4, md: 5 },
               lineHeight: 1.6,
-              fontSize: { xs: '1rem', sm: '1.1rem', md: '1.2rem' },
+              fontSize: { xs: '0.9rem', sm: '1rem', md: '1.1rem' },
               fontWeight: 400,
-              maxWidth: '55rem',
+              maxWidth: '45rem',
               mx: 'auto'
             }}>
-              Access your comprehensive AI assistant for all RailTel operations and management
+              Access your comprehensive document management system for all RailTel operations and Divisions
             </Typography>
 
-            {/* Management and GPT Cards - Side by Side */}
-            <Grid container spacing={4} sx={{ mb: { xs: 6, md: 8 } }}>
-              {/* Management Card */}
-              <Grid item xs={12} md={6}>
-                <Card
-                  sx={{
-                    height: '100%',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    '&:hover': {
-                      transform: 'translateY(-12px)',
-                      boxShadow: '0 25px 35px -5px rgba(25, 118, 210, 0.2), 0 15px 15px -5px rgba(25, 118, 210, 0.12)',
-                    },
-                    borderRadius: 4,
-                    border: '2px solid #bbdefb',
-                    overflow: 'hidden',
-                    position: 'relative',
-                    boxShadow: '0 10px 20px rgba(25, 118, 210, 0.1)'
-                  }}
-                  onClick={handleManageClick}
-                >
-                  {/* Management Badge */}
-                  <Box sx={{
-                    position: 'absolute',
-                    top: 16,
-                    right: 16,
-                    zIndex: 1
-                  }}>
-                    <Chip 
-                      icon={<OperationsIcon sx={{ fontSize: '14px !important' }} />}
-                      label="MANAGEMENT"
-                      size="medium"
-                      sx={{
-                        backgroundColor: '#1976d2',
-                        color: 'white',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        height: 28,
-                        px: 1
-                      }}
-                    />
-                  </Box>
-
-                  <CardContent sx={{ p: { xs: 4, md: 5 }, pb: { xs: 4, md: 5 } }}>
-                    {/* Management Icon */}
-                    <Box sx={{ 
-                      display: 'flex',
-                      justifyContent: 'center',
-                      mb: 4
+            {/* Management and Document Manager Cards - Properly sized and centered */}
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'center',
+              mb: { xs: 4, md: 5 }
+            }}>
+              <Grid container spacing={3} sx={{ maxWidth: '800px' }}>
+                {/* Management Card */}
+                <Grid item xs={12} sm={6}>
+                  <Card
+                    sx={{
+                      height: '100%',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      '&:hover': {
+                        transform: 'translateY(-8px)',
+                        boxShadow: '0 20px 25px -5px rgba(211, 47, 47, 0.15), 0 10px 10px -5px rgba(211, 47, 47, 0.1)',
+                      },
+                      borderRadius: 2,
+                      border: '2px solid #ffcdd2',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      boxShadow: '0 8px 15px rgba(211, 47, 47, 0.08)'
+                    }}
+                    onClick={handleManageClick}
+                  >
+                    {/* Management Badge */}
+                    <Box sx={{
+                      position: 'absolute',
+                      top: 12,
+                      right: 12,
+                      zIndex: 1
                     }}>
-                      <Box sx={{ 
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: { xs: 80, md: 90 },
-                        height: { xs: 80, md: 90 },
-                        backgroundColor: '#e3f2fd',
-                        borderRadius: 3,
-                        border: '3px solid #bbdefb'
-                      }}>
-                        <OperationsIcon sx={{ fontSize: { xs: 40, md: 45 }, color: '#1976d2' }} />
-                      </Box>
-                    </Box>
-
-                    {/* Management Info */}
-                    <Typography sx={{ 
-                      fontWeight: 700, 
-                      color: '#111827', 
-                      mb: 3,
-                      fontSize: { xs: '1.5rem', md: '1.8rem' },
-                      letterSpacing: '-0.025em',
-                      textAlign: 'center'
-                    }}>
-                      User & Department Management
-                    </Typography>
-                    <Typography sx={{ 
-                      color: '#6b7280', 
-                      mb: 5, 
-                      lineHeight: 1.7,
-                      fontSize: { xs: '1rem', md: '1.1rem' },
-                      textAlign: 'center'
-                    }}>
-                      Create and manage users, assign multiple departments, and configure organizational structure
-                    </Typography>
-
-                    {/* Access Button */}
-                    <Box sx={{ 
-                      display: 'flex', 
-                      justifyContent: 'center',
-                      pt: 3, 
-                      borderTop: '1px solid #bbdefb'
-                    }}>
-                      <Button
-                        variant="contained"
-                        endIcon={<ArrowForwardIcon sx={{ fontSize: 20 }} />}
-                        size="large"
-                        sx={{
-                          backgroundColor: '#1976d2',
-                          color: 'white',
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          px: 4,
-                          py: 1.5,
-                          borderRadius: 3,
-                          fontSize: '1.1rem',
-                          '&:hover': {
-                            backgroundColor: '#1565c0',
-                            transform: 'translateX(4px)'
-                          },
-                          transition: 'all 0.2s ease',
-                          boxShadow: '0 8px 16px rgba(25, 118, 210, 0.3)'
-                        }}
-                      >
-                        Manage Users & Departments
-                      </Button>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* GPT Card */}
-              <Grid item xs={12} md={6}>
-                <Card
-                  sx={{
-                    height: '100%',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    '&:hover': {
-                      transform: 'translateY(-12px)',
-                      boxShadow: '0 25px 35px -5px rgba(211, 47, 47, 0.2), 0 15px 15px -5px rgba(211, 47, 47, 0.12)',
-                    },
-                    borderRadius: 4,
-                    border: '2px solid #ffcdd2',
-                    overflow: 'hidden',
-                    position: 'relative',
-                    boxShadow: '0 10px 20px rgba(211, 47, 47, 0.1)'
-                  }}
-                  onClick={handleGPTClick}
-                >
-                  {/* Admin Badge */}
-                  <Box sx={{
-                    position: 'absolute',
-                    top: 16,
-                    right: 16,
-                    zIndex: 1
-                  }}>
-                    <Chip 
-                      icon={<AdminIcon sx={{ fontSize: '14px !important' }} />}
-                      label="ADMIN ACCESS"
-                      size="medium"
-                      sx={{
-                        backgroundColor: '#d32f2f',
-                        color: 'white',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        height: 28,
-                        px: 1
-                      }}
-                    />
-                  </Box>
-
-                  <CardContent sx={{ p: { xs: 4, md: 5 }, pb: { xs: 4, md: 5 } }}>
-                    {/* GPT Icon */}
-                    <Box sx={{ 
-                      display: 'flex',
-                      justifyContent: 'center',
-                      mb: 4
-                    }}>
-                      <Box sx={{ 
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: { xs: 80, md: 90 },
-                        height: { xs: 80, md: 90 },
-                        backgroundColor: railtelGPT.bgColor,
-                        borderRadius: 3,
-                        border: '3px solid #ffcdd2'
-                      }}>
-                        <railtelGPT.icon sx={{ fontSize: { xs: 40, md: 45 }, color: railtelGPT.color }} />
-                      </Box>
-                    </Box>
-
-                    {/* GPT Info */}
-                    <Typography sx={{ 
-                      fontWeight: 700, 
-                      color: '#111827', 
-                      mb: 3,
-                      fontSize: { xs: '1.5rem', md: '1.8rem' },
-                      letterSpacing: '-0.025em',
-                      textAlign: 'center'
-                    }}>
-                      {railtelGPT.name}
-                    </Typography>
-                    <Typography sx={{ 
-                      color: '#6b7280', 
-                      mb: 5, 
-                      lineHeight: 1.7,
-                      fontSize: { xs: '1rem', md: '1.1rem' },
-                      textAlign: 'center'
-                    }}>
-                      {railtelGPT.description}
-                    </Typography>
-
-                    {/* Access Button */}
-                    <Box sx={{ 
-                      display: 'flex', 
-                      justifyContent: 'center',
-                      pt: 3, 
-                      borderTop: '1px solid #ffcdd2'
-                    }}>
-                      <Button
-                        variant="contained"
-                        endIcon={<ArrowForwardIcon sx={{ fontSize: 20 }} />}
-                        size="large"
+                      <Chip 
+                        icon={<OperationsIcon sx={{ fontSize: '12px !important' }} />}
+                        label="MANAGEMENT"
+                        size="small"
                         sx={{
                           backgroundColor: '#d32f2f',
                           color: 'white',
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          px: 4,
-                          py: 1.5,
-                          borderRadius: 3,
-                          fontSize: '1.1rem',
-                          '&:hover': {
-                            backgroundColor: '#b71c1c',
-                            transform: 'translateX(4px)'
-                          },
-                          transition: 'all 0.2s ease',
-                          boxShadow: '0 8px 16px rgba(211, 47, 47, 0.3)'
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          height: 24
                         }}
-                      >
-                        Enter RailTel GPT
-                      </Button>
+                      />
                     </Box>
-                  </CardContent>
-                </Card>
+
+                    <CardContent sx={{ p: 3 }}>
+                      {/* Management Icon */}
+                      <Box sx={{ 
+                        display: 'flex',
+                        justifyContent: 'center',
+                        mb: 2
+                      }}>
+                        <Box sx={{ 
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 60,
+                          height: 60,
+                          backgroundColor: '#ffffffff',
+                          borderRadius: 2,
+                          border: '2px solid #ffcdd2'
+                        }}>
+                          <OperationsIcon sx={{ fontSize: 28, color: '#d32f2f' }} />
+                        </Box>
+                      </Box>
+
+                      {/* Management Info */}
+                      <Typography sx={{ 
+                        fontWeight: 700, 
+                        color: '#111827', 
+                        mb: 2,
+                        fontSize: '1.1rem',
+                        letterSpacing: '-0.025em',
+                        textAlign: 'center'
+                      }}>
+                        User & Division Management
+                      </Typography>
+                      <Typography sx={{ 
+                        color: '#6b7280', 
+                        mb: 3, 
+                        lineHeight: 1.6,
+                        fontSize: '0.85rem',
+                        textAlign: 'center'
+                      }}>
+                        Create and manage users, assign multiple divisions, and configure organizational structure
+                      </Typography>
+
+                      {/* Access Button */}
+                      <Box sx={{ 
+                        display: 'flex', 
+                        justifyContent: 'center',
+                        pt: 2, 
+                        borderTop: '1px solid #f3f4f6'
+                      }}>
+                        <Button
+                          variant="contained"
+                          endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
+                          size="medium"
+                          sx={{
+                            backgroundColor: '#d32f2f',
+                            color: 'white',
+                            textTransform: 'none',
+                            fontWeight: 600,
+                            px: 3,
+                            py: 1,
+                            borderRadius: 2,
+                            fontSize: '0.9rem',
+                            '&:hover': {
+                              backgroundColor: '#b71c1c',
+                              transform: 'translateX(2px)'
+                            },
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 4px 8px rgba(211, 47, 47, 0.2)'
+                          }}
+                        >
+                          Manage System
+                        </Button>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                {/* Document Manager Card */}
+                <Grid item xs={12} sm={6}>
+                  <Card
+                    sx={{
+                      height: '100%',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      '&:hover': {
+                        transform: 'translateY(-8px)',
+                        boxShadow: '0 20px 25px -5px rgba(211, 47, 47, 0.15), 0 10px 10px -5px rgba(211, 47, 47, 0.1)',
+                      },
+                      borderRadius: 2,
+                      border: '2px solid #ffcdd2',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      boxShadow: '0 8px 15px rgba(211, 47, 47, 0.08)'
+                    }}
+                    onClick={handleDocumentManagerClick}
+                  >
+                    {/* Admin Badge */}
+                    <Box sx={{
+                      position: 'absolute',
+                      top: 12,
+                      right: 12,
+                      zIndex: 1
+                    }}>
+                      <Chip 
+                        icon={<AdminIcon sx={{ fontSize: '12px !important' }} />}
+                        label="DOCUMENTS"
+                        size="small"
+                        sx={{
+                          backgroundColor: '#d32f2f',
+                          color: 'white',
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          height: 24
+                        }}
+                      />
+                    </Box>
+
+                    <CardContent sx={{ p: 3 }}>
+                      {/* Document Manager Icon */}
+                      <Box sx={{ 
+                        display: 'flex',
+                        justifyContent: 'center',
+                        mb: 2
+                      }}>
+                        <Box sx={{ 
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 60,
+                          height: 60,
+                          backgroundColor: '#ffffffff',
+                          
+                          borderRadius: 2,
+                          border: '2px solid #ffcdd2'
+                        }}>
+                          <railtelDocumentManager.icon sx={{ fontSize: 28, color: railtelDocumentManager.color }} />
+                        </Box>
+                      </Box>
+
+                      {/* Document Manager Info */}
+                      <Typography sx={{ 
+                        fontWeight: 700, 
+                        color: '#111827', 
+                        mb: 2,
+                        fontSize: '1.1rem',
+                        letterSpacing: '-0.025em',
+                        textAlign: 'center'
+                      }}>
+                        Document Manager
+                      </Typography>
+                      <Typography sx={{ 
+                        color: '#6b7280', 
+                        mb: 3, 
+                        lineHeight: 1.6,
+                        fontSize: '0.85rem',
+                        textAlign: 'center'
+                      }}>
+                        Comprehensive document management system for all RailTel Divisions
+                      </Typography>
+
+                      {/* Access Button */}
+                      <Box sx={{ 
+                        display: 'flex', 
+                        justifyContent: 'center',
+                        pt: 2, 
+                        borderTop: '1px solid #ffcdd2'
+                      }}>
+                        <Button
+                          variant="contained"
+                          endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
+                          size="medium"
+                          sx={{
+                            backgroundColor: '#d32f2f',
+                            color: 'white',
+                            textTransform: 'none',
+                            fontWeight: 600,
+                            px: 3,
+                            py: 1,
+                            borderRadius: 2,
+                            fontSize: '0.9rem',
+                            '&:hover': {
+                              backgroundColor: '#b71c1c',
+                              transform: 'translateX(2px)'
+                            },
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 4px 8px rgba(211, 47, 47, 0.2)'
+                          }}
+                        >
+                          Enter Manager
+                        </Button>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
               </Grid>
-            </Grid>
+            </Box>
 
             {/* Admin Trust Indicators */}
             <Box sx={{ 
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: { xs: 3, sm: 4, md: 6 },
+              gap: { xs: 3, sm: 4, md: 5 },
               flexWrap: 'wrap'
             }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <AdminIcon sx={{ fontSize: { xs: 18, md: 20 }, color: '#d32f2f' }} />
-                <Typography variant="body1" sx={{ 
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AdminIcon sx={{ fontSize: 16, color: '#d32f2f' }} />
+                <Typography variant="body2" sx={{ 
                   fontWeight: 500,
-                  fontSize: { xs: '0.9rem', md: '1rem' },
+                  fontSize: '0.85rem',
                   color: '#374151'
                 }}>
                   Enhanced Security
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <SecurityIcon sx={{ fontSize: { xs: 18, md: 20 }, color: '#d32f2f' }} />
-                <Typography variant="body1" sx={{ 
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <SecurityIcon sx={{ fontSize: 16, color: '#d32f2f' }} />
+                <Typography variant="body2" sx={{ 
                   fontWeight: 500,
-                  fontSize: { xs: '0.9rem', md: '1rem' },
+                  fontSize: '0.85rem',
                   color: '#374151'
                 }}>
-                  System Management
+                  Document Management
                 </Typography>
               </Box>
             </Box>
           </Box>
         </Container>
       </Box>
+
+      {/* Logout Confirmation Dialog */}
+      <Dialog open={openLogoutDialog} onClose={handleCancelLogout} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirm Logout</DialogTitle>
+        <DialogContent>
+          <Typography>Are you sure you want to logout? You will need to login again to access the admin panel.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelLogout}>Cancel</Button>
+          <Button 
+            onClick={handleConfirmLogout} 
+            variant="contained"
+            color="error"
+            sx={{ backgroundColor: '#d32f2f' }}
+          >
+            Logout
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
-}
+};
+
+export default LandingPage;

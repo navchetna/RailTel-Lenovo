@@ -10,6 +10,7 @@ import LeftSidebar from '@/components/LeftSidebar';
 import RightSidebar from '@/components/RightSidebar';
 import ChatArea from '@/components/ChatArea';
 import ChatAreaAdmin from '@/components/ChatArea_Admin';
+import FileManagerPage from '@/components/DocumentFileManager';
 import SearchLanding from '@/components/SearchLanding';
 import SearchResults from '@/components/SearchResults';
 import LandingPage from '@/components/LandingPage_Admin';
@@ -22,7 +23,7 @@ const mockUser = {
   avatarUrl: '/placeholder.svg',
 };
 
-export default function Home() {
+const Home: React.FC = () => {
   const [currentContext, setCurrentContext] = useState<string>('General');
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const { messages, isLoading, error } = useChat();
@@ -60,8 +61,6 @@ export default function Home() {
     }
   }, []);
 
-  
-
   // Handle login form submission
   const handleLogin = (credentials: { email: string; password: string }) => {
     let loginUserType: 'admin' | 'user' | null = null;
@@ -95,6 +94,22 @@ export default function Home() {
     // Store in localStorage for persistence
     localStorage.setItem('isAuthenticated', 'true');
     localStorage.setItem('department', department);
+  };
+
+  // Handle going back to landing page (department selection)
+  const handleGoBackToLanding = () => {
+    // Reset authentication but keep login status
+    setIsAuthenticated(false);
+    setCurrentDepartment('');
+    
+    // Clear department-specific localStorage but keep login info
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('department');
+    
+    // Reset other application states
+    setSelectedConversation(null);
+    setIsSearchOpen(false);
+    setSearchResults(null);
   };
 
   const handleLogout = () => {
@@ -151,9 +166,10 @@ export default function Home() {
 
   // Step 2: Show appropriate landing page based on user type
   if (!isAuthenticated) {
+    // In your index.tsx file, update this line:
     return userType === 'admin' 
-      ? <AdminLandingPage onAuthenticated={handleDepartmentAuthentication} />
-      : <LandingPage onAuthenticated={handleDepartmentAuthentication} />;
+      ? <AdminLandingPage onAuthenticated={handleDepartmentAuthentication} onLogout={handleLogout} />
+      : <LandingPage onAuthenticated={handleDepartmentAuthentication} onLogout={handleLogout} />;
   }
 
   // Step 3: Show main application if both logged in and department selected
@@ -170,18 +186,17 @@ export default function Home() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      return (
       {userType === 'admin' ? (
         <Navbar_admin
           user={authenticatedUser}
           onLogout={handleLogout}
-          department={currentDepartment}
+          onGoBack={handleGoBackToLanding}
         />
       ) : (
         <Navbar
           user={authenticatedUser}
           onLogout={handleLogout}
-          department={currentDepartment}
+          onGoBack={handleGoBackToLanding}
         />
       )}
 
@@ -195,7 +210,8 @@ export default function Home() {
           position: 'relative'
         }}
       >
-        {!isSearchOpen && (
+        {/* Only show LeftSidebar for regular users (not admin) and when search is not open */}
+        {!isSearchOpen && userType !== 'admin' && (
           <LeftSidebar
             onSelectConversation={setSelectedConversation}
             selectedConversation={selectedConversation}
@@ -208,7 +224,8 @@ export default function Home() {
           component="main"
           sx={{
             position: 'fixed',
-            left: isSearchOpen ? 0 : leftSidebarWidth,
+            // For admin users, start from left edge (0), for regular users use sidebar width
+            left: isSearchOpen ? 0 : (userType === 'admin' ? 0 : leftSidebarWidth),
             right: rightSidebarWidth,
             top: '64px',
             bottom: 0,
@@ -239,17 +256,7 @@ export default function Home() {
             ) : (
               // Conditional rendering based on user type
               userType === 'admin' ? (
-                <ChatAreaAdmin
-                  conversationId={selectedConversation}
-                  onTogglePDFViewer={handleTogglePDFViewer}
-                  isPDFViewerOpen={isPDFViewerOpen}
-                  isCollapsed={isSidebarCollapsed}
-                  onCollapseChange={handleSidebarCollapse}
-                  onContextChange={setCurrentContext}
-                  onSelectConversation={setSelectedConversation}
-                  onConversationUpdated={handleConversationUpdated}
-                  updateConversationList={() => setRefreshCounter(prev => prev + 1)}
-                />
+                <FileManagerPage />
               ) : (
                 <ChatArea
                   conversationId={selectedConversation}
@@ -278,4 +285,6 @@ export default function Home() {
       </Box>
     </Box>
   );
-}
+};
+
+export default Home;
