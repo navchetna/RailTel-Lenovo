@@ -8,6 +8,10 @@
 # next.js
 /.next/
 /out/
+**out**
+
+*uploaded_files*
+
 
 # production
 /build
